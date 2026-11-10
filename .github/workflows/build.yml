@@ -36,12 +36,18 @@ jobs:
             echo "::error::Die Secrets SATELLIT_KEYSTORE und SATELLIT_PASSWORT fehlen (Settings > Secrets and variables > Actions)."
             exit 1
           fi
-          echo "$KS" | base64 -d > "$RUNNER_TEMP/satellit.keystore"
+          # beim Kopieren mitgerutschte unsichtbare Zeichen (Leerzeichen, Zeilenumbruch, BOM …) entfernen
+          PW_SAUBER=$(printf '%s' "$PW" | LC_ALL=C tr -cd 'A-Za-z0-9_-')
+          echo "::add-mask::$PW_SAUBER"
+          printf '%s' "$KS" | LC_ALL=C tr -cd 'A-Za-z0-9+/=' | base64 -d > "$RUNNER_TEMP/satellit.keystore"
+          if ! keytool -list -keystore "$RUNNER_TEMP/satellit.keystore" -storepass "$PW_SAUBER" -alias satellit > /dev/null 2>&1; then
+            echo "::error::Schlüssel und Passwort passen nicht zusammen. Bitte beide Secrets noch einmal genau aus den Dateien übernehmen."
+            exit 1
+          fi
           echo "SATELLIT_KEYSTORE_DATEI=$RUNNER_TEMP/satellit.keystore" >> "$GITHUB_ENV"
+          echo "SATELLIT_PASSWORT=$PW_SAUBER" >> "$GITHUB_ENV"
 
       - name: APK bauen
-        env:
-          SATELLIT_PASSWORT: ${{ secrets.SATELLIT_PASSWORT }}
         run: gradle :app:assembleRelease --no-daemon --stacktrace
 
       - name: Signierschlüssel entfernen
