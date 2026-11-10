@@ -13,6 +13,7 @@ import android.net.LinkAddress;
 import android.net.LinkProperties;
 import android.net.Network;
 import android.net.NetworkCapabilities;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -69,6 +70,28 @@ public class MainActivity extends Activity {
     String fehler;
     boolean laedt;
     boolean imHeimnetz = true;
+    String warten;   // Hinweis, solange der PC noch nicht bestätigt hat
+
+    final Runnable nochmal = new Runnable() { @Override public void run() { laden(); } };
+
+    // zufällige Kennung dieses Handys (neu nach "Trennen", damit der PC erneut fragt)
+    String geraetId() {
+        String id = prefs.getString("geraet", null);
+        if (id == null) {
+            byte[] z = new byte[16];
+            new java.security.SecureRandom().nextBytes(z);
+            id = Verbindung.hex(z);
+            prefs.edit().putString("geraet", id).apply();
+        }
+        return id;
+    }
+
+    static String geraetName() {
+        String h = Build.MANUFACTURER == null ? "" : Build.MANUFACTURER, m = Build.MODEL == null ? "" : Build.MODEL;
+        String n = m.toLowerCase(Locale.ROOT).startsWith(h.toLowerCase(Locale.ROOT)) ? m : (h + " " + m);
+        n = n.trim();
+        return n.length() == 0 ? "Android-Handy" : (n.length() > 60 ? n.substring(0, 60) : n);
+    }
     final Set<String> zugeklappt = new HashSet<>();
 
     final Runnable automatisch = new Runnable() {
@@ -162,6 +185,7 @@ public class MainActivity extends Activity {
     protected void onPause() {
         super.onPause();
         handler.removeCallbacks(automatisch);
+        handler.removeCallbacks(nochmal);
     }
 
     // ---------- Koppeln: nur über den QR-Code, den der PC anzeigt ----------
@@ -186,6 +210,7 @@ public class MainActivity extends Activity {
         try {
             Verbindung.Kopplung k = Verbindung.lesen(text);
             prefs.edit().putString("kopplung", k.alsText()).apply();
+            warten = null;
             daten = null;
             fehler = null;
             laden();
@@ -202,7 +227,8 @@ public class MainActivity extends Activity {
                 .setMessage("Der gespeicherte Schlüssel wird gelöscht. Zum erneuten Verbinden musst du am PC den Kopplungs-Code wieder scannen.")
                 .setPositiveButton("Trennen", new DialogInterface.OnClickListener() {
                     @Override public void onClick(DialogInterface d, int w) {
-                        prefs.edit().remove("kopplung").apply();
+                        prefs.edit().remove("kopplung").remove("geraet").apply();
+                        warten = null;
                         daten = null;
                         fehler = null;
                         anzeigen();
@@ -265,6 +291,7 @@ public class MainActivity extends Activity {
         if (netz != null) for (String ip : k.adressen) if (imSelbenNetz(netz, ip)) passend.add(ip);
         if (netz == null || passend.isEmpty()) {
             imHeimnetz = false;
+            warten = null;
             daten = null;
             fehler = null;
             anzeigen();
@@ -274,25 +301,32 @@ public class MainActivity extends Activity {
         k.adressen = passend;
         laedt = true;
         aktualisiereKopf();
+        final String gid = geraetId(), gname = geraetName();
         new Thread(new Runnable() {
             @Override public void run() {
                 JSONObject neu = null;
-                String f = null;
+                String f = null, w = null;
                 try {
-                    neu = new JSONObject(Verbindung.abrufen(k, netz.getSocketFactory()));
+                    neu = new JSONObject(Verbindung.abrufen(k, netz.getSocketFactory(), gid, gname));
                     if (!neu.has("Depots")) throw new Verbindung.Fehler("Unerwartete Daten vom PC.");
+                } catch (Verbindung.Warten e) {
+                    w = e.getMessage();
                 } catch (Verbindung.Fehler e) {
                     f = e.getMessage();
                 } catch (Exception e) {
                     f = "Die Daten vom PC konnten nicht gelesen werden: " + e.getMessage();
                 }
                 final JSONObject ergebnis = neu;
-                final String fehlerText = f;
+                final String fehlerText = f, wartenText = w;
                 handler.post(new Runnable() {
                     @Override public void run() {
                         laedt = false;
                         if (ergebnis != null) daten = ergebnis;
                         fehler = fehlerText;
+                        warten = wartenText;
+                        // solange der PC fragt: alle 3 Sekunden nachsehen, ob erlaubt wurde
+                        handler.removeCallbacks(nochmal);
+                        if (wartenText != null) handler.postDelayed(nochmal, 3000);
                         anzeigen();
                     }
                 });
@@ -331,11 +365,13 @@ public class MainActivity extends Activity {
         aktualisiereKopf();
         inhalt.removeAllViews();
         if (fehler != null) inhalt.addView(hinweis(fehler, ROT));
+        if (warten != null && prefs.getString("kopplung", null) != null) inhalt.addView(hinweis("⏳ " + warten, GELB));
         if (prefs.getString("kopplung", null) == null) {
             inhalt.addView(hinweis("Willkommen! So koppelst du den Satelliten mit deinem PC:\n\n" +
                     "1. Das Handy ins selbe WLAN bringen, in dem dein PC steht.\n\n" +
                     "2. Am PC in Aktien-Graphen unter Einstellungen › Synchronisation den Handy-Satelliten einschalten und „Kopplungs-Code zeigen“ klicken.\n\n" +
                     "3. Hier oben „QR-Code scannen“ tippen und den Code vom PC-Bildschirm scannen.\n\n" +
+                    "4. Am PC erscheint eine Abfrage – dort „Erlauben“ klicken.\n\n" +
                     "Danach holt die App die Daten jede Minute direkt vom PC – nur in deinem Heimnetz, verschlüsselt und ohne Cloud. " +
                     "Sie kann am PC nichts verändern.", TEXT));
             return;

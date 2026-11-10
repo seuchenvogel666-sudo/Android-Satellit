@@ -99,12 +99,12 @@ public final class Verbindung {
      * Holt die Daten vom PC. fabrik = Socket-Fabrik des WLANs (damit nichts über Mobilfunk läuft).
      * Gibt das JSON als Text zurück.
      */
-    public static String abrufen(Kopplung k, SocketFactory fabrik) throws Fehler {
+    public static String abrufen(Kopplung k, SocketFactory fabrik, String geraetId, String geraetName) throws Fehler {
         Fehler letzter = null;
         for (String ip : k.adressen) {
             if (!privateAdresse(ip) && !testOhneHeimnetz) continue;
             try {
-                return abrufenVon(ip, k, fabrik);
+                return abrufenVon(ip, k, fabrik, geraetId, geraetName);
             } catch (Fehler f) {
                 letzter = f;
                 if (f instanceof Abgelehnt) throw f;   // PC erreicht, aber Schlüssel/Zeit falsch – andere Adressen helfen nicht
@@ -113,11 +113,16 @@ public final class Verbindung {
         throw letzter != null ? letzter : new Fehler("Keine Heimnetz-Adresse gespeichert. Bitte neu koppeln.");
     }
 
-    static final class Abgelehnt extends Fehler {
+    static class Abgelehnt extends Fehler {
         Abgelehnt(String s) { super(s); }
     }
 
-    private static String abrufenVon(String ip, Kopplung k, SocketFactory fabrik) throws Fehler {
+    /** Der PC fragt gerade nach, ob dieses Handy erlaubt wird. */
+    public static final class Warten extends Abgelehnt {
+        Warten(String s) { super(s); }
+    }
+
+    private static String abrufenVon(String ip, Kopplung k, SocketFactory fabrik, String geraetId, String geraetName) throws Fehler {
         Socket s = null;
         try {
             InetAddress ziel = InetAddress.getByAddress(zahlen(ip));
@@ -130,8 +135,8 @@ public final class Verbindung {
             new SecureRandom().nextBytes(z);
             String nonce = hex(z);
             String t = String.valueOf(System.currentTimeMillis() / 1000);
-            String m = hex(hmac(abgeleitet(k.schluessel, "auth"), ("GET|" + t + "|" + nonce).getBytes("UTF-8")));
-            String anfrage = "GET /satellit?t=" + t + "&n=" + nonce + "&m=" + m + " HTTP/1.1\r\n" +
+            String m = hex(hmac(abgeleitet(k.schluessel, "auth"), ("GET|" + t + "|" + nonce + "|" + geraetId + "|" + geraetName).getBytes("UTF-8")));
+            String anfrage = "GET /satellit?t=" + t + "&n=" + nonce + "&g=" + geraetId + "&d=" + enc(geraetName) + "&m=" + m + " HTTP/1.1\r\n" +
                     "Host: " + ip + ":" + k.port + "\r\nConnection: close\r\n\r\n";
             OutputStream aus = s.getOutputStream();
             aus.write(anfrage.getBytes("US-ASCII"));
@@ -155,6 +160,12 @@ public final class Verbindung {
             String kopf = new String(alles, 0, ende, "US-ASCII");
             String status = kopf.split("\r\n")[0];
             if (status.contains(" 403")) {
+                if (kopf.contains("X-Grund: warten"))
+                    throw new Warten("Bitte am PC bestätigen: Dort ist jetzt eine Abfrage „Ein Handy möchte sich verbinden“ zu sehen. Klicke auf „Erlauben“ – das Handy verbindet sich dann von selbst.");
+                if (kopf.contains("X-Grund: abgelehnt"))
+                    throw new Abgelehnt("Die Verbindung wurde am PC abgelehnt. In 10 Minuten kannst du es erneut versuchen.");
+                if (kopf.contains("X-Grund: update"))
+                    throw new Abgelehnt("Bitte die App aktualisieren (neue Version über den QR-Code am PC laden).");
                 if (kopf.contains("X-Grund: zeit"))
                     throw new Abgelehnt("Der PC hat abgelehnt: Die Uhrzeit von Handy und PC weicht mehr als 10 Minuten ab.");
                 throw new Abgelehnt("Der PC kennt dieses Handy nicht (mehr). Bitte am PC den Kopplungs-Code zeigen und hier neu scannen.");

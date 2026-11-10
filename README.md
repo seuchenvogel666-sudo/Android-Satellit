@@ -25,7 +25,9 @@ sie kann am PC nichts verändern.
 3. Linker QR-Code (öffentlich): mit der Handy-Kamera scannen, APK laden und installieren
    (beim ersten Mal „Installation aus unbekannten Quellen“ erlauben).
 4. Am PC „Kopplungs-Code zeigen“ klicken, in der App „QR-Code scannen“ tippen und den
-   rechten Code scannen. Fertig – die App lädt jede Minute neu, solange sie geöffnet ist.
+   rechten Code scannen.
+5. Am PC erscheint „Ein Handy möchte sich verbinden“ – auf „Erlauben“ klicken. Die App wartet
+   so lange und verbindet sich dann von selbst. Danach lädt sie jede Minute neu.
 
 ## Sicherheit
 
@@ -38,7 +40,9 @@ sie kann am PC nichts verändern.
   wenn die PC-Adresse im aktuellen WLAN liegt. Außerhalb zeigt sie nichts an.
 - Daten werden nur im Arbeitsspeicher gehalten, nicht auf dem Handy gespeichert.
   Android-Sicherungen der App sind abgeschaltet.
-- „Trennen“ in der App löscht den Schlüssel; „Alle Handys trennen“ am PC macht alle alten
+- Jedes neue Handy muss am PC von Hand erlaubt werden (Fenster mit Gerätename und Adresse).
+  Erlaubte Handys stehen in einer Liste und lassen sich einzeln entfernen.
+- „Trennen“ in der App löscht Schlüssel und Gerätekennung (danach fragt der PC erneut); „Alle Handys trennen“ am PC macht alle alten
   Kopplungen ungültig.
 - Für den QR-Scanner werden die Google Play-Dienste genutzt (keine Kamera-Berechtigung nötig).
 
