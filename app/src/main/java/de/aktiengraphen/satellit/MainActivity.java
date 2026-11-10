@@ -1,12 +1,18 @@
 package de.aktiengraphen.satellit;
 
 import android.app.Activity;
-import android.content.Intent;
+import android.app.AlertDialog;
+import android.content.Context;
+import android.content.DialogInterface;
 import android.content.SharedPreferences;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
-import android.net.Uri;
+import android.net.ConnectivityManager;
+import android.net.LinkAddress;
+import android.net.LinkProperties;
+import android.net.Network;
+import android.net.NetworkCapabilities;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -18,23 +24,28 @@ import android.widget.LinearLayout;
 import android.widget.ScrollView;
 import android.widget.TextView;
 
+import com.google.mlkit.vision.barcode.common.Barcode;
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions;
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning;
+
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
+import java.net.Inet4Address;
+import java.net.InetAddress;
 import java.util.HashSet;
 import java.util.Locale;
 import java.util.Set;
 
 /**
- * Aktien-Satellit: zeigt die Übersicht, die Aktien-Graphen auf dem PC in die Datei satellit.json schreibt.
- * Die Datei liegt im Cloud-Ordner (Google Drive, OneDrive, Dropbox …) und wird über die Android-Dateiauswahl
- * verbunden. Die App liest nur – sie kann am PC nichts verändern.
+ * Aktien-Satellit: zeigt die Übersicht von Aktien-Graphen am PC – nur im Heimnetz.
+ * - gekoppelt wird ausschließlich über den Kopplungs-QR-Code, den der PC anzeigt (enthält einen geheimen Schlüssel)
+ * - verbunden wird nur über WLAN/LAN (nie Mobilfunk, nie VPN) und nur, wenn der PC im selben Netz liegt
+ * - die Daten kommen verschlüsselt und werden nur im Arbeitsspeicher gehalten, nicht gespeichert
+ * Die App liest nur – sie kann am PC nichts verändern.
  */
 public class MainActivity extends Activity {
 
-    static final int ANFRAGE_DATEI = 1;
     static final long NEU_LADEN_MS = 60000;
 
     // Farben (Nachtblau, wie am PC)
@@ -57,6 +68,7 @@ public class MainActivity extends Activity {
     JSONObject daten;
     String fehler;
     boolean laedt;
+    boolean imHeimnetz = true;
     final Set<String> zugeklappt = new HashSet<>();
 
     final Runnable automatisch = new Runnable() {
@@ -92,12 +104,15 @@ public class MainActivity extends Activity {
         knoepfe.setPadding(0, dp(8), 0, 0);
         TextView neu = knopf("Neu laden");
         neu.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { laden(); } });
-        TextView verbinden = knopf("Datei verbinden");
-        verbinden.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { dateiWaehlen(); } });
+        TextView koppeln = knopf("QR-Code scannen");
+        koppeln.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { scannen(); } });
+        TextView trennen = knopf("Trennen");
+        trennen.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { trennenFragen(); } });
         knoepfe.addView(neu);
-        View abstand = new View(this);
-        knoepfe.addView(abstand, new LinearLayout.LayoutParams(dp(8), 1));
-        knoepfe.addView(verbinden);
+        knoepfe.addView(new View(this), new LinearLayout.LayoutParams(dp(8), 1));
+        knoepfe.addView(koppeln);
+        knoepfe.addView(new View(this), new LinearLayout.LayoutParams(dp(8), 1));
+        knoepfe.addView(trennen);
         kopf.addView(knoepfe);
         wurzel.addView(kopf);
 
@@ -149,40 +164,114 @@ public class MainActivity extends Activity {
         handler.removeCallbacks(automatisch);
     }
 
-    // ---------- Datei verbinden (Android-Dateiauswahl: Drive, OneDrive, Dropbox, Dateien …) ----------
-    void dateiWaehlen() {
-        Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-        i.addCategory(Intent.CATEGORY_OPENABLE);
-        i.setType("*/*");
-        i.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION | Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION);
+    // ---------- Koppeln: nur über den QR-Code, den der PC anzeigt ----------
+    void scannen() {
         try {
-            startActivityForResult(i, ANFRAGE_DATEI);
+            GmsBarcodeScannerOptions o = new GmsBarcodeScannerOptions.Builder()
+                    .setBarcodeFormats(Barcode.FORMAT_QR_CODE)
+                    .build();
+            GmsBarcodeScanning.getClient(this, o).startScan()
+                    .addOnSuccessListener(b -> koppeln(b.getRawValue()))
+                    .addOnFailureListener(e -> {
+                        fehler = "Der QR-Scanner konnte nicht starten (er braucht die Google Play-Dienste und lädt sich beim ersten Mal kurz herunter): " + e.getMessage();
+                        anzeigen();
+                    });
         } catch (Exception e) {
-            fehler = "Die Dateiauswahl konnte nicht geöffnet werden.";
+            fehler = "Der QR-Scanner ist auf diesem Handy nicht verfügbar: " + e.getMessage();
             anzeigen();
         }
     }
 
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (requestCode != ANFRAGE_DATEI || resultCode != RESULT_OK || data == null || data.getData() == null) return;
-        Uri uri = data.getData();
+    void koppeln(String text) {
         try {
-            getContentResolver().takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION);
-        } catch (Exception e) {
-            // manche Anbieter erlauben keine dauerhafte Freigabe – dann gilt sie bis zum Neustart der App
+            Verbindung.Kopplung k = Verbindung.lesen(text);
+            prefs.edit().putString("kopplung", k.alsText()).apply();
+            daten = null;
+            fehler = null;
+            laden();
+        } catch (Verbindung.Fehler f) {
+            fehler = f.getMessage();
+            anzeigen();
         }
-        prefs.edit().putString("datei", uri.toString()).apply();
-        fehler = null;
-        laden();
+    }
+
+    void trennenFragen() {
+        if (prefs.getString("kopplung", null) == null) return;
+        new AlertDialog.Builder(this)
+                .setTitle("Vom PC trennen?")
+                .setMessage("Der gespeicherte Schlüssel wird gelöscht. Zum erneuten Verbinden musst du am PC den Kopplungs-Code wieder scannen.")
+                .setPositiveButton("Trennen", new DialogInterface.OnClickListener() {
+                    @Override public void onClick(DialogInterface d, int w) {
+                        prefs.edit().remove("kopplung").apply();
+                        daten = null;
+                        fehler = null;
+                        anzeigen();
+                    }
+                })
+                .setNegativeButton("Abbrechen", null)
+                .show();
+    }
+
+    // ---------- Heimnetz: nur WLAN/LAN, kein Mobilfunk, kein VPN ----------
+    Network heimnetz() {
+        ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        if (cm == null) return null;
+        Network n = cm.getActiveNetwork();
+        if (n == null) return null;
+        NetworkCapabilities c = cm.getNetworkCapabilities(n);
+        if (c == null || c.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) return null;
+        if (!c.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) && !c.hasTransport(NetworkCapabilities.TRANSPORT_ETHERNET)) return null;
+        return n;
+    }
+
+    // liegt die PC-Adresse im Teilnetz dieses WLANs?
+    boolean imSelbenNetz(Network n, String ip) {
+        ConnectivityManager cm = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
+        LinkProperties lp = cm == null ? null : cm.getLinkProperties(n);
+        if (lp == null) return false;
+        byte[] ziel = Verbindung.zahlen(ip);
+        for (LinkAddress la : lp.getLinkAddresses()) {
+            InetAddress a = la.getAddress();
+            if (!(a instanceof Inet4Address)) continue;
+            byte[] eigen = a.getAddress();
+            int bits = la.getPrefixLength();
+            if (bits < 8 || bits > 32) continue;
+            boolean gleich = true;
+            for (int i = 0; i < 32 && i < bits; i++) {
+                int maske = 0x80 >> (i % 8);
+                if ((eigen[i / 8] & maske) != (ziel[i / 8] & maske)) { gleich = false; break; }
+            }
+            if (gleich) return true;
+        }
+        return false;
     }
 
     // ---------- Laden (im Hintergrund) ----------
     void laden() {
-        final String u = prefs.getString("datei", null);
-        if (u == null) { anzeigen(); return; }
+        final String code = prefs.getString("kopplung", null);
+        if (code == null) { anzeigen(); return; }
         if (laedt) return;
+        final Network netz = heimnetz();
+        final Verbindung.Kopplung k;
+        try {
+            k = Verbindung.lesen(code);
+        } catch (Verbindung.Fehler f) {
+            fehler = f.getMessage();
+            anzeigen();
+            return;
+        }
+        // Außerhalb des Heimnetzes: gar keine Verbindung versuchen und nichts anzeigen
+        java.util.List<String> passend = new java.util.ArrayList<>();
+        if (netz != null) for (String ip : k.adressen) if (imSelbenNetz(netz, ip)) passend.add(ip);
+        if (netz == null || passend.isEmpty()) {
+            imHeimnetz = false;
+            daten = null;
+            fehler = null;
+            anzeigen();
+            return;
+        }
+        imHeimnetz = true;
+        k.adressen = passend;
         laedt = true;
         aktualisiereKopf();
         new Thread(new Runnable() {
@@ -190,21 +279,12 @@ public class MainActivity extends Activity {
                 JSONObject neu = null;
                 String f = null;
                 try {
-                    InputStream in = getContentResolver().openInputStream(Uri.parse(u));
-                    if (in == null) throw new Exception("Datei nicht lesbar");
-                    ByteArrayOutputStream puffer = new ByteArrayOutputStream();
-                    byte[] b = new byte[16384];
-                    int n;
-                    while ((n = in.read(b)) > 0) puffer.write(b, 0, n);
-                    in.close();
-                    String s = new String(puffer.toByteArray(), "UTF-8");
-                    if (s.length() > 0 && s.charAt(0) == '﻿') s = s.substring(1);
-                    neu = new JSONObject(s);
-                    if (!neu.has("Depots")) throw new Exception("Das ist keine Satellit-Datei (satellit.json) von Aktien-Graphen.");
-                } catch (SecurityException e) {
-                    f = "Kein Zugriff mehr auf die Datei – bitte „Datei verbinden“ und satellit.json neu wählen.";
+                    neu = new JSONObject(Verbindung.abrufen(k, netz.getSocketFactory()));
+                    if (!neu.has("Depots")) throw new Verbindung.Fehler("Unerwartete Daten vom PC.");
+                } catch (Verbindung.Fehler e) {
+                    f = e.getMessage();
                 } catch (Exception e) {
-                    f = "Datei konnte nicht gelesen werden: " + e.getMessage();
+                    f = "Die Daten vom PC konnten nicht gelesen werden: " + e.getMessage();
                 }
                 final JSONObject ergebnis = neu;
                 final String fehlerText = f;
@@ -230,7 +310,9 @@ public class MainActivity extends Activity {
             long alter = System.currentTimeMillis() / 1000 - daten.optLong("StandUnix", 0);
             if (daten.optLong("StandUnix", 0) > 0 && alter > 600)
                 s.append(" · ").append(alter / 60).append(" Min. alt");
-        } else s.append("Noch keine Daten");
+        } else if (prefs.getString("kopplung", null) == null) s.append("Nicht gekoppelt");
+        else if (!imHeimnetz) s.append("Nicht im Heimnetz – keine Verbindung");
+        else s.append("Noch keine Daten");
         s.append(" · nur Ansicht");
         if (laedt) s.append(" · lädt …");
         kopfStatus.setText(s.toString());
@@ -249,12 +331,19 @@ public class MainActivity extends Activity {
         aktualisiereKopf();
         inhalt.removeAllViews();
         if (fehler != null) inhalt.addView(hinweis(fehler, ROT));
-        if (prefs.getString("datei", null) == null) {
-            inhalt.addView(hinweis("Willkommen! So verbindest du den Satelliten mit deinem PC:\n\n" +
-                    "1. Am PC in Aktien-Graphen unter Einstellungen › Synchronisation einen Cloud-Dienst wählen und „Handy-Satellit“ einschalten.\n\n" +
-                    "2. Hier „Datei verbinden“ tippen, links im Menü die App deines Cloud-Dienstes wählen (z. B. Google Drive, OneDrive, Dropbox) " +
-                    "und im Ordner AktienGraphen die Datei satellit.json antippen.\n\n" +
-                    "Die App lädt danach jede Minute neu und kann am PC nichts verändern.", TEXT));
+        if (prefs.getString("kopplung", null) == null) {
+            inhalt.addView(hinweis("Willkommen! So koppelst du den Satelliten mit deinem PC:\n\n" +
+                    "1. Das Handy ins selbe WLAN bringen, in dem dein PC steht.\n\n" +
+                    "2. Am PC in Aktien-Graphen unter Einstellungen › Synchronisation den Handy-Satelliten einschalten und „Kopplungs-Code zeigen“ klicken.\n\n" +
+                    "3. Hier oben „QR-Code scannen“ tippen und den Code vom PC-Bildschirm scannen.\n\n" +
+                    "Danach holt die App die Daten jede Minute direkt vom PC – nur in deinem Heimnetz, verschlüsselt und ohne Cloud. " +
+                    "Sie kann am PC nichts verändern.", TEXT));
+            return;
+        }
+        if (!imHeimnetz) {
+            inhalt.addView(hinweis("Du bist nicht in deinem Heimnetz – deshalb gibt es keine Verbindung und keine Anzeige.\n\n" +
+                    "Der Satellit verbindet sich nur über das WLAN, in dem dein PC steht – nie über Mobilfunk oder VPN. " +
+                    "Sobald du wieder zu Hause im WLAN bist, lädt er automatisch.", GELB));
             return;
         }
         if (daten == null) {
@@ -263,8 +352,7 @@ public class MainActivity extends Activity {
         }
         long alter = System.currentTimeMillis() / 1000 - daten.optLong("StandUnix", 0);
         if (daten.optLong("StandUnix", 0) > 0 && alter > 600)
-            inhalt.addView(hinweis("Die Daten sind " + (alter / 60) + " Minuten alt. Läuft Aktien-Graphen am PC, und ist die Cloud verbunden? " +
-                    "Manche Cloud-Apps übertragen Änderungen erst nach einiger Zeit.", GELB));
+            inhalt.addView(hinweis("Der Stand vom PC ist " + (alter / 60) + " Minuten alt. Läuft Aktien-Graphen am PC noch, und stimmt die Uhrzeit?", GELB));
         if (reiter == 0) depots();
         else if (reiter == 1) empfehlungen();
         else positionen();

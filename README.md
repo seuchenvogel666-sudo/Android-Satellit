@@ -1,6 +1,6 @@
 # Aktien-Satellit (Android, nur Ansicht)
 
-Zeigt auf dem Handy, was Aktien-Graphen auf dem PC macht: Übungsdepots (Wert, Verlauf,
+Zeigt auf dem Handy – nur im eigenen Heimnetz –, was Aktien-Graphen auf dem PC macht: Übungsdepots (Wert, Verlauf,
 Bestand, Kauf- und Verkaufsbewegungen), Empfehlungen und Positionen. Die App liest nur –
 sie kann am PC nichts verändern.
 
@@ -16,17 +16,31 @@ sie kann am PC nichts verändern.
 
    https://github.com/seuchenvogel666-sudo/android-satellit/releases/download/satellit-latest/aktien-satellit.apk
 
-## Mit dem PC verbinden
+## Mit dem PC koppeln (nur im Heimnetz)
 
-1. Am PC: Aktien-Graphen › Einstellungen › Synchronisation
-   - Dienst wählen (Google Drive, OneDrive, Dropbox …) – dessen PC-Programm muss installiert sein.
-   - „Übersicht für die Handy-App bereitstellen“ einschalten.
-   - Den Link von oben eintragen → der QR-Code erscheint.
-2. Handy: QR-Code mit der Kamera scannen, APK laden und installieren
+1. Handy ins selbe WLAN bringen, in dem der PC steht.
+2. Am PC: Aktien-Graphen › Einstellungen › Synchronisation › Handy-Satellit einschalten.
+   Beim ersten Mal fragt Windows evtl., ob das Programm im Netzwerk erreichbar sein darf:
+   nur „Private Netzwerke“ erlauben.
+3. Linker QR-Code (öffentlich): mit der Handy-Kamera scannen, APK laden und installieren
    (beim ersten Mal „Installation aus unbekannten Quellen“ erlauben).
-3. In der App „Datei verbinden“ → im Menü die App des Cloud-Dienstes wählen
-   (Google Drive, OneDrive, Dropbox) → Ordner `AktienGraphen` → `satellit.json`.
-4. Fertig. Die App lädt jede Minute neu, solange sie geöffnet ist („Neu laden“ geht jederzeit).
+4. Am PC „Kopplungs-Code zeigen“ klicken, in der App „QR-Code scannen“ tippen und den
+   rechten Code scannen. Fertig – die App lädt jede Minute neu, solange sie geöffnet ist.
+
+## Sicherheit
+
+- Gekoppelt wird nur über den Kopplungs-Code am PC. Er enthält einen geheimen Schlüssel
+  (256 Bit) und ist nur auf Knopfdruck 2 Minuten sichtbar. Die öffentliche APK allein nützt
+  niemandem etwas.
+- Der PC antwortet nur Geräten aus seinem eigenen lokalen Teilnetz und nur mit gültiger
+  Signatur. Die Daten sind verschlüsselt (AES-256 + HMAC-SHA256).
+- Die App verbindet sich nur über WLAN/LAN – nie über Mobilfunk, nie über VPN – und nur,
+  wenn die PC-Adresse im aktuellen WLAN liegt. Außerhalb zeigt sie nichts an.
+- Daten werden nur im Arbeitsspeicher gehalten, nicht auf dem Handy gespeichert.
+  Android-Sicherungen der App sind abgeschaltet.
+- „Trennen“ in der App löscht den Schlüssel; „Alle Handys trennen“ am PC macht alle alten
+  Kopplungen ungültig.
+- Für den QR-Scanner werden die Google Play-Dienste genutzt (keine Kamera-Berechtigung nötig).
 
 Hinweis: Neue Versionen lassen sich einfach über die alte installieren (fester Schlüssel
 `app/satellit.keystore`, nur für diese private App gedacht).
