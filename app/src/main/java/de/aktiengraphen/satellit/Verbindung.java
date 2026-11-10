@@ -146,9 +146,12 @@ public final class Verbindung {
             ByteArrayOutputStream puffer = new ByteArrayOutputStream();
             byte[] b = new byte[16384];
             int n;
+            long frist = System.currentTimeMillis() + 30000;   // höchstens 30 Sekunden insgesamt
             while ((n = ein.read(b)) > 0) {
                 puffer.write(b, 0, n);
-                if (puffer.size() > 50 * 1024 * 1024) throw new Fehler("Antwort zu groß.");
+                if (puffer.size() > 10 * 1024 * 1024) throw new Fehler("Antwort zu groß – das ist nicht dein PC.");
+                if (System.currentTimeMillis() > frist) throw new Fehler("Der PC antwortet zu langsam – Verbindung abgebrochen.");
+                s.setSoTimeout((int) Math.max(1000, Math.min(15000, frist - System.currentTimeMillis())));
             }
             byte[] alles = puffer.toByteArray();
             int ende = -1;

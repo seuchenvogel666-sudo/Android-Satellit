@@ -27,8 +27,26 @@ jobs:
         with:
           gradle-version: '8.9'
 
+      - name: Signierschlüssel aus den Secrets holen
+        env:
+          KS: ${{ secrets.SATELLIT_KEYSTORE }}
+          PW: ${{ secrets.SATELLIT_PASSWORT }}
+        run: |
+          if [ -z "$KS" ] || [ -z "$PW" ]; then
+            echo "::error::Die Secrets SATELLIT_KEYSTORE und SATELLIT_PASSWORT fehlen (Settings > Secrets and variables > Actions)."
+            exit 1
+          fi
+          echo "$KS" | base64 -d > "$RUNNER_TEMP/satellit.keystore"
+          echo "SATELLIT_KEYSTORE_DATEI=$RUNNER_TEMP/satellit.keystore" >> "$GITHUB_ENV"
+
       - name: APK bauen
+        env:
+          SATELLIT_PASSWORT: ${{ secrets.SATELLIT_PASSWORT }}
         run: gradle :app:assembleRelease --no-daemon --stacktrace
+
+      - name: Signierschlüssel entfernen
+        if: always()
+        run: rm -f "$RUNNER_TEMP/satellit.keystore"
 
       - name: APK umbenennen
         run: cp app/build/outputs/apk/release/app-release.apk aktien-satellit.apk

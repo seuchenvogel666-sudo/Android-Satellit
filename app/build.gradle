@@ -10,17 +10,18 @@ android {
         applicationId 'de.aktiengraphen.satellit'
         minSdk 24
         targetSdk 34
-        versionCode 3
-        versionName '2.1'
+        versionCode 4
+        versionName '2.2'
     }
 
-    // fester Schlüssel: so lassen sich neue Versionen einfach über die alte installieren
+    // Signierschlüssel kommt NUR aus den GitHub-Secrets (SATELLIT_KEYSTORE, SATELLIT_PASSWORT) –
+    // er steht nicht im öffentlichen Repository, damit niemand gefälschte Updates signieren kann
     signingConfigs {
         fest {
-            storeFile file('satellit.keystore')
-            storePassword 'satellit123'
+            storeFile file(System.getenv('SATELLIT_KEYSTORE_DATEI') ?: 'kein-schluessel.keystore')
+            storePassword System.getenv('SATELLIT_PASSWORT')
             keyAlias 'satellit'
-            keyPassword 'satellit123'
+            keyPassword System.getenv('SATELLIT_PASSWORT')
         }
     }
 

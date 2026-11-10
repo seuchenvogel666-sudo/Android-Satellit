@@ -46,5 +46,12 @@ sie kann am PC nichts verändern.
   Kopplungen ungültig.
 - Für den QR-Scanner werden die Google Play-Dienste genutzt (keine Kamera-Berechtigung nötig).
 
-Hinweis: Neue Versionen lassen sich einfach über die alte installieren (fester Schlüssel
-`app/satellit.keystore`, nur für diese private App gedacht).
+## Signierschlüssel (einmalig einrichten)
+
+Der Schlüssel, mit dem die APK signiert wird, liegt **nicht** im Repository, sondern als
+GitHub-Secret: Settings › Secrets and variables › Actions › „New repository secret“
+- `SATELLIT_KEYSTORE` – Inhalt der Datei satellit-keystore-base64.txt
+- `SATELLIT_PASSWORT` – Inhalt der Datei satellit-passwort.txt
+
+So kann niemand eine gefälschte „Update“-APK mit derselben Signatur bauen. Neue Versionen
+lassen sich weiterhin einfach über die alte installieren.
