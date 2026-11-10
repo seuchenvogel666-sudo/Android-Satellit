@@ -1,0 +1,41 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace 'de.aktiengraphen.satellit'
+    compileSdk 34
+
+    defaultConfig {
+        applicationId 'de.aktiengraphen.satellit'
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+    }
+
+    // fester Schlüssel: so lassen sich neue Versionen einfach über die alte installieren
+    signingConfigs {
+        fest {
+            storeFile file('satellit.keystore')
+            storePassword 'satellit123'
+            keyAlias 'satellit'
+            keyPassword 'satellit123'
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.fest
+        }
+        debug {
+            signingConfig signingConfigs.fest
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_1_8
+        targetCompatibility JavaVersion.VERSION_1_8
+    }
+}
