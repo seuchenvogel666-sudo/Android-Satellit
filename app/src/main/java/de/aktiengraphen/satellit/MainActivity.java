@@ -417,6 +417,12 @@ public class MainActivity extends Activity {
             double gv = d.optDouble("Gv", 0), gvp = d.optDouble("GvProzent", 0);
             karte.addView(text((gv >= 0 ? "+" : "−") + geld(Math.abs(gv), w) + "  (" + prozent(gvp) + ") seit Start", 14, gv >= 0 ? GRUEN : ROT, false));
             karte.addView(text(s(d, "Laufzeit"), 12, GRAU, false));
+            // gesicherter Gewinn und Verlustbremse auch im zugeklappten Zustand
+            double ges = d.optDouble("Gesichert", 0);
+            if (ges > 0.004 || d.optDouble("GewinnSicherung", 0) > 0)
+                karte.addView(text("Gesicherter Gewinn " + geld(ges, w), 13, GRUEN, true));
+            if (d.optBoolean("Gebremst", false))
+                karte.addView(text("Verlustbremse aktiv – kauft nicht mehr (" + String.format(Locale.GERMANY, "%.1f", d.optDouble("Rueckgang", 0)) + " % unter Höchststand)", 13, ROT, true));
             final boolean zu = zugeklappt.contains(name);
             View.OnClickListener klapp = new View.OnClickListener() {
                 @Override public void onClick(View v) {
@@ -447,6 +453,18 @@ public class MainActivity extends Activity {
 
             karte.addView(text("Bargeld " + geld(d.optDouble("Bargeld", 0), w) + " · " + d.optInt("Trades", 0) + " Trades · Kosten " +
                     geld(d.optDouble("Gebuehren", 0), w), 12, GRAU, false));
+            StringBuilder zusatz = new StringBuilder();
+            if (d.optBoolean("SteuerAn", false)) zusatz.append("Steuer dieses Jahr ").append(geld(d.optDouble("SteuerJahr", 0), w));
+            if (d.optDouble("Einzahlung", 0) > 0) {
+                if (zusatz.length() > 0) zusatz.append(" · ");
+                zusatz.append("Einzahlung ").append(geld(d.optDouble("Einzahlung", 0), w)).append(" ").append(s(d, "EinzahlungTakt"))
+                      .append(" · eingezahlt ").append(geld(d.optDouble("Eingezahlt", 0), w));
+            }
+            if (d.optDouble("Verlustbremse", 0) > 0 && !d.optBoolean("Gebremst", false)) {
+                if (zusatz.length() > 0) zusatz.append(" · ");
+                zusatz.append("Verlustbremse ").append(String.format(Locale.GERMANY, "%.1f / %.0f %%", d.optDouble("Rueckgang", 0), d.optDouble("Verlustbremse", 0)));
+            }
+            if (zusatz.length() > 0) karte.addView(text(zusatz.toString(), 12, GRAU, false));
             karte.addView(text(s(d, "Strategie") + " · " + s(d, "Ziel") + " · Tempo " + s(d, "Tempo") +
                     " · " + s(d, "Handel"), 12, GRAU, false));
 
