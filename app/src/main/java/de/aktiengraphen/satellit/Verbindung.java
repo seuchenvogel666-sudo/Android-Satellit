@@ -22,6 +22,7 @@ import javax.net.SocketFactory;
 
 /**
  * Verbindung zum PC im Heimnetz (reines Java, ohne Android-Teile – dadurch auch am PC testbar).
+ * Einziger Befehl ans PC-Programm: NOTAUS (GET /notaus, signiert mit "NOTAUS|…") – stoppt jeden Handel.
  *
  * Ablauf: Das Handy fragt GET /satellit?t=Zeit&n=Zufall&m=HMAC an. Der PC antwortet nur, wenn die Anfrage
  * aus seinem lokalen Netz kommt und mit dem Schlüssel aus dem Kopplungs-QR-Code signiert ist.
@@ -100,11 +101,23 @@ public final class Verbindung {
      * Gibt das JSON als Text zurück.
      */
     public static String abrufen(Kopplung k, SocketFactory fabrik, String geraetId, String geraetName) throws Fehler {
+        return senden(k, fabrik, geraetId, geraetName, false);
+    }
+
+    /**
+     * NOTAUS: bittet den PC, sofort jeden Handel zu stoppen. Das ist der einzige Befehl, den das Handy geben kann –
+     * Handel starten oder freigeben geht nur am PC. Gibt die (verschlüsselte, geprüfte) Bestätigung des PCs als JSON zurück.
+     */
+    public static String notaus(Kopplung k, SocketFactory fabrik, String geraetId, String geraetName) throws Fehler {
+        return senden(k, fabrik, geraetId, geraetName, true);
+    }
+
+    private static String senden(Kopplung k, SocketFactory fabrik, String geraetId, String geraetName, boolean notaus) throws Fehler {
         Fehler letzter = null;
         for (String ip : k.adressen) {
             if (!privateAdresse(ip) && !testOhneHeimnetz) continue;
             try {
-                return abrufenVon(ip, k, fabrik, geraetId, geraetName);
+                return abrufenVon(ip, k, fabrik, geraetId, geraetName, notaus);
             } catch (Fehler f) {
                 letzter = f;
                 if (f instanceof Abgelehnt) throw f;   // PC erreicht, aber Schlüssel/Zeit falsch – andere Adressen helfen nicht
@@ -122,7 +135,7 @@ public final class Verbindung {
         Warten(String s) { super(s); }
     }
 
-    private static String abrufenVon(String ip, Kopplung k, SocketFactory fabrik, String geraetId, String geraetName) throws Fehler {
+    private static String abrufenVon(String ip, Kopplung k, SocketFactory fabrik, String geraetId, String geraetName, boolean notaus) throws Fehler {
         Socket s = null;
         try {
             InetAddress ziel = InetAddress.getByAddress(zahlen(ip));
@@ -135,8 +148,8 @@ public final class Verbindung {
             new SecureRandom().nextBytes(z);
             String nonce = hex(z);
             String t = String.valueOf(System.currentTimeMillis() / 1000);
-            String m = hex(hmac(abgeleitet(k.schluessel, "auth"), ("GET|" + t + "|" + nonce + "|" + geraetId + "|" + geraetName).getBytes("UTF-8")));
-            String anfrage = "GET /satellit?t=" + t + "&n=" + nonce + "&g=" + geraetId + "&d=" + enc(geraetName) + "&m=" + m + " HTTP/1.1\r\n" +
+            String m = hex(hmac(abgeleitet(k.schluessel, "auth"), ((notaus ? "NOTAUS|" : "GET|") + t + "|" + nonce + "|" + geraetId + "|" + geraetName).getBytes("UTF-8")));
+            String anfrage = "GET " + (notaus ? "/notaus" : "/satellit") + "?t=" + t + "&n=" + nonce + "&g=" + geraetId + "&d=" + enc(geraetName) + "&m=" + m + " HTTP/1.1\r\n" +
                     "Host: " + ip + ":" + k.port + "\r\nConnection: close\r\n\r\n";
             OutputStream aus = s.getOutputStream();
             aus.write(anfrage.getBytes("US-ASCII"));
@@ -170,7 +183,8 @@ public final class Verbindung {
                 if (kopf.contains("X-Grund: update"))
                     throw new Abgelehnt("Bitte die App aktualisieren (neue Version über den QR-Code am PC laden).");
                 if (kopf.contains("X-Grund: zeit"))
-                    throw new Abgelehnt("Der PC hat abgelehnt: Die Uhrzeit von Handy und PC weicht mehr als 10 Minuten ab.");
+                    throw new Abgelehnt(notaus ? "Der PC hat den Notaus abgelehnt: Die Uhrzeit von Handy und PC weicht mehr als 2 Minuten ab."
+                            : "Der PC hat abgelehnt: Die Uhrzeit von Handy und PC weicht mehr als 10 Minuten ab.");
                 throw new Abgelehnt("Der PC kennt dieses Handy nicht (mehr). Bitte am PC den Kopplungs-Code zeigen und hier neu scannen.");
             }
             if (status.contains(" 503")) throw new Fehler("Der PC stellt gerade noch die Daten zusammen – gleich noch einmal versuchen.");

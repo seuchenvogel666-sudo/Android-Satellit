@@ -4,6 +4,8 @@
     <!-- nur für die Verbindung zum PC im eigenen WLAN -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <!-- Benachrichtigungen (Notaus, Verlustbremse, großer Gewinn, Tagesbericht, PC offline) -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <application
         android:allowBackup="false"

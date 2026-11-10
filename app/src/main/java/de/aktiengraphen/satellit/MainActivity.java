@@ -1,10 +1,12 @@
 package de.aktiengraphen.satellit;
 
+import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.Context;
 import android.content.DialogInterface;
 import android.content.SharedPreferences;
+import android.content.pm.PackageManager;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -43,7 +45,9 @@ import java.util.Set;
  * - gekoppelt wird ausschließlich über den Kopplungs-QR-Code, den der PC anzeigt (enthält einen geheimen Schlüssel)
  * - verbunden wird nur über WLAN/LAN (nie Mobilfunk, nie VPN) und nur, wenn der PC im selben Netz liegt
  * - die Daten kommen verschlüsselt und werden nur im Arbeitsspeicher gehalten, nicht gespeichert
- * Die App liest nur – sie kann am PC nichts verändern.
+ * Die App liest nur. Einzige Ausnahme ist der NOTAUS: Er stoppt am PC sofort jeden Handel (freigeben nur am PC).
+ * Meldungen (Verlustbremse, großer Gewinn, Stillstand, Notaus, Tagesbericht, PC offline) kommen als Benachrichtigung –
+ * abgeholt etwa alle 15 Minuten, ebenfalls nur im Heimnetz.
  */
 public class MainActivity extends Activity {
 
@@ -171,7 +175,20 @@ public class MainActivity extends Activity {
         wurzel.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         setContentView(wurzel);
+        Hinweise.kanaele(this);
+        if (prefs.getString("kopplung", null) != null) benachrichtigungenStarten();
         anzeigen();
+    }
+
+    // Hintergrund-Abruf der Meldungen und (ab Android 13) die Erlaubnis für Benachrichtigungen
+    void benachrichtigungenStarten() {
+        boolean an = prefs.getBoolean("melden", true);
+        Waechter.planen(getApplicationContext(), an);
+        if (an && Build.VERSION.SDK_INT >= 33 && checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
+                && !prefs.getBoolean("erlaubnis_gefragt", false)) {
+            prefs.edit().putBoolean("erlaubnis_gefragt", true).apply();
+            requestPermissions(new String[] { Manifest.permission.POST_NOTIFICATIONS }, 1);
+        }
     }
 
     @Override
@@ -209,10 +226,11 @@ public class MainActivity extends Activity {
     void koppeln(String text) {
         try {
             Verbindung.Kopplung k = Verbindung.lesen(text);
-            prefs.edit().putString("kopplung", k.alsText()).apply();
+            prefs.edit().putString("kopplung", k.alsText()).remove("meldung_letzte").apply();
             warten = null;
             daten = null;
             fehler = null;
+            benachrichtigungenStarten();
             laden();
         } catch (Verbindung.Fehler f) {
             fehler = f.getMessage();
@@ -227,7 +245,8 @@ public class MainActivity extends Activity {
                 .setMessage("Der gespeicherte Schlüssel wird gelöscht. Zum erneuten Verbinden musst du am PC den Kopplungs-Code wieder scannen.")
                 .setPositiveButton("Trennen", new DialogInterface.OnClickListener() {
                     @Override public void onClick(DialogInterface d, int w) {
-                        prefs.edit().remove("kopplung").remove("geraet").apply();
+                        prefs.edit().remove("kopplung").remove("geraet").remove("meldung_letzte").apply();
+                        Waechter.planen(getApplicationContext(), false);
                         warten = null;
                         daten = null;
                         fehler = null;
@@ -309,6 +328,8 @@ public class MainActivity extends Activity {
                 try {
                     neu = new JSONObject(Verbindung.abrufen(k, netz.getSocketFactory(), gid, gname));
                     if (!neu.has("Depots")) throw new Verbindung.Fehler("Unerwartete Daten vom PC.");
+                    Hinweise.pcErreichbar(getApplicationContext());
+                    Hinweise.verarbeiten(getApplicationContext(), neu);
                 } catch (Verbindung.Warten e) {
                     w = e.getMessage();
                 } catch (Verbindung.Fehler e) {
@@ -347,7 +368,7 @@ public class MainActivity extends Activity {
         } else if (prefs.getString("kopplung", null) == null) s.append("Nicht gekoppelt");
         else if (!imHeimnetz) s.append("Nicht im Heimnetz – keine Verbindung");
         else s.append("Noch keine Daten");
-        s.append(" · nur Ansicht");
+        s.append(" · Ansicht + Notaus");
         if (laedt) s.append(" · lädt …");
         kopfStatus.setText(s.toString());
         long alter = daten == null ? 0 : System.currentTimeMillis() / 1000 - daten.optLong("StandUnix", 0);
@@ -373,7 +394,7 @@ public class MainActivity extends Activity {
                     "3. Hier oben „QR-Code scannen“ tippen und den Code vom PC-Bildschirm scannen.\n\n" +
                     "4. Am PC erscheint eine Abfrage – dort „Erlauben“ klicken.\n\n" +
                     "Danach holt die App die Daten jede Minute direkt vom PC – nur in deinem Heimnetz, verschlüsselt und ohne Cloud. " +
-                    "Sie kann am PC nichts verändern.", TEXT));
+                    "Am PC kann sie nur eines: per NOTAUS sofort jeden Handel stoppen. Freigeben geht nur am PC.", TEXT));
             return;
         }
         if (!imHeimnetz) {
@@ -394,7 +415,142 @@ public class MainActivity extends Activity {
         else positionen();
     }
 
+    // ---------- NOTAUS: einziger Befehl ans PC-Programm ----------
+    String notausErgebnis;
+    int notausFarbe = GRAU;
+    boolean notausLaeuft;
+
+    void notausBereich() {
+        JSONObject na = daten.optJSONObject("Notaus");
+        if (notausErgebnis != null) inhalt.addView(hinweis(notausErgebnis, notausFarbe));
+        if (na != null && na.optBoolean("Aktiv", false)) {
+            inhalt.addView(hinweis("■ " + s(na, "Text") + ".\nFreigeben geht nur am PC (rote Leiste oben im Programm).", ROT));
+            return;
+        }
+        TextView k = text(notausLaeuft ? "NOTAUS wird gesendet …" : "■  NOTAUS – allen Handel am PC stoppen", 16, Color.WHITE, true);
+        k.setGravity(Gravity.CENTER);
+        k.setPadding(dp(14), dp(14), dp(14), dp(14));
+        GradientDrawable g = new GradientDrawable();
+        g.setCornerRadius(dp(10));
+        g.setColor(Color.rgb(170, 25, 35));
+        k.setBackground(g);
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(0, dp(6), 0, dp(6));
+        k.setLayoutParams(lp);
+        k.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { notausFragen(); } });
+        inhalt.addView(k);
+    }
+
+    void notausFragen() {
+        if (notausLaeuft) return;
+        new AlertDialog.Builder(this)
+                .setTitle("NOTAUS")
+                .setMessage("Jetzt sofort jeden Handel am PC stoppen?\n\nAlle Depots (Übungs- und Realdepots) handeln danach nicht mehr – auch keine Schutzverkäufe –, " +
+                        "bis du den Notaus am PC wieder aufhebst. Freigeben geht nur am PC.")
+                .setPositiveButton("STOPPEN", new DialogInterface.OnClickListener() {
+                    @Override public void onClick(DialogInterface d, int w) { notausSenden(); }
+                })
+                .setNegativeButton("Abbrechen", null)
+                .show();
+    }
+
+    void notausSenden() {
+        final String code = prefs.getString("kopplung", null);
+        final Network netz = heimnetz();
+        final Verbindung.Kopplung k;
+        try { k = Verbindung.lesen(code); } catch (Verbindung.Fehler f) { notausErgebnis = f.getMessage(); notausFarbe = ROT; anzeigen(); return; }
+        java.util.List<String> passend = Heimnetz.passend(this, netz, k);
+        if (netz == null || passend.isEmpty()) {
+            notausErgebnis = "Notaus NICHT gesendet: Das Handy ist nicht im Heimnetz des PCs.";
+            notausFarbe = ROT;
+            anzeigen();
+            return;
+        }
+        k.adressen = passend;
+        notausLaeuft = true;
+        anzeigen();
+        final String gid = geraetId(), gname = geraetName();
+        new Thread(new Runnable() {
+            @Override public void run() {
+                String erg; int farbe;
+                try {
+                    JSONObject a = new JSONObject(Verbindung.notaus(k, netz.getSocketFactory(), gid, gname));
+                    if (!a.optBoolean("Notaus", false)) throw new Verbindung.Fehler("Der PC hat den Notaus nicht bestätigt.");
+                    erg = "✓ Vom PC bestätigt: " + s(a, "Text") + " (" + a.optInt("Depots", 0) + " aktive Depots angehalten).";
+                    farbe = GELB;
+                } catch (Exception e) {
+                    erg = "Notaus NICHT angekommen: " + e.getMessage() + "\nBitte am PC selbst stoppen (Reiter System › NOTAUS).";
+                    farbe = ROT;
+                }
+                final String e2 = erg; final int f2 = farbe;
+                handler.post(new Runnable() {
+                    @Override public void run() {
+                        notausLaeuft = false;
+                        notausErgebnis = e2;
+                        notausFarbe = f2;
+                        laden();
+                        anzeigen();
+                    }
+                });
+            }
+        }).start();
+    }
+
+    void meldungenBereich() {
+        JSONArray m = daten.optJSONArray("Meldungen");
+        if (m == null || m.length() == 0) return;
+        LinearLayout k = karte();
+        k.addView(text("Letzte Meldungen", 15, TEXT, true));
+        for (int i = m.length() - 1, n = 0; i >= 0 && n < 4; i--, n++) {
+            JSONObject e = m.optJSONObject(i);
+            if (e == null) continue;
+            String zeit = new java.text.SimpleDateFormat("dd.MM. HH:mm", Locale.GERMANY).format(new java.util.Date(e.optLong("Zeit", 0) * 1000));
+            String art = s(e, "Art");
+            int farbe = art.equals("notaus") || art.equals("bremse") || art.equals("daten") ? ROT : art.equals("gewinn") ? GRUEN : BLAU;
+            k.addView(text(zeit + " · " + s(e, "Titel"), 13, farbe, true));
+            TextView t = text(s(e, "Text"), 12, GRAU, false);
+            t.setPadding(0, 0, 0, dp(6));
+            k.addView(t);
+        }
+        inhalt.addView(k);
+    }
+
+    void einstellungenBereich() {
+        LinearLayout k = karte();
+        k.addView(text("Benachrichtigungen", 15, TEXT, true));
+        k.addView(text("Etwa alle 15 Minuten fragt das Handy im Heimnetz beim PC nach neuen Meldungen: Notaus, Verlustbremse, großer Gewinn, " +
+                "Depot steht still, Datenquelle gestört, PC nicht erreichbar – und um 20 Uhr der Tagesbericht. Außerhalb des Heimnetzes gibt es keine.", 12, GRAU, false));
+        LinearLayout z = new LinearLayout(this);
+        z.setOrientation(LinearLayout.HORIZONTAL);
+        z.setPadding(0, dp(8), 0, 0);
+        final boolean an = prefs.getBoolean("melden", true), bericht = prefs.getBoolean("bericht", true);
+        TextView k1 = knopf(an ? "Meldungen: an" : "Meldungen: aus");
+        k1.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                prefs.edit().putBoolean("melden", !an).apply();
+                benachrichtigungenStarten();
+                anzeigen();
+            }
+        });
+        TextView k2 = knopf(bericht ? "Tagesbericht: an" : "Tagesbericht: aus");
+        k2.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) { prefs.edit().putBoolean("bericht", !bericht).apply(); anzeigen(); }
+        });
+        z.addView(k1);
+        z.addView(new View(this), new LinearLayout.LayoutParams(dp(8), 1));
+        z.addView(k2);
+        k.addView(z);
+        inhalt.addView(k);
+    }
+
     void depots() {
+        notausBereich();
+        meldungenBereich();
+        depotListe();
+        einstellungenBereich();
+    }
+
+    void depotListe() {
         JSONArray l = daten.optJSONArray("Depots");
         if (l == null || l.length() == 0) { inhalt.addView(hinweis("Keine Übungsdepots vorhanden.", GRAU)); return; }
         for (int i = 0; i < l.length(); i++) {
@@ -408,15 +564,19 @@ public class MainActivity extends Activity {
             LinearLayout zeile = new LinearLayout(this);
             zeile.setOrientation(LinearLayout.HORIZONTAL);
             zeile.setGravity(Gravity.CENTER_VERTICAL);
-            TextView tn = text(name, 17, TEXT, true);
+            TextView tn = text((d.optBoolean("Real", false) ? "Realdepot · " : "") + name, 17, TEXT, true);
             zeile.addView(tn, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-            TextView aktiv = text(d.optBoolean("Aktiv", true) ? "aktiv" : "pausiert", 11, d.optBoolean("Aktiv", true) ? GRUEN : GELB, true);
+            JSONObject na0 = daten.optJSONObject("Notaus");
+            boolean notaus = na0 != null && na0.optBoolean("Aktiv", false);
+            TextView aktiv = text(notaus ? "NOTAUS" : d.optBoolean("Aktiv", true) ? "aktiv" : "pausiert", 11, notaus ? ROT : d.optBoolean("Aktiv", true) ? GRUEN : GELB, true);
             zeile.addView(aktiv);
             karte.addView(zeile);
             karte.addView(text(geld(d.optDouble("Wert", 0), w), 26, TEXT, true));
             double gv = d.optDouble("Gv", 0), gvp = d.optDouble("GvProzent", 0);
             karte.addView(text((gv >= 0 ? "+" : "−") + geld(Math.abs(gv), w) + "  (" + prozent(gvp) + ") seit Start", 14, gv >= 0 ? GRUEN : ROT, false));
             karte.addView(text(s(d, "Laufzeit"), 12, GRAU, false));
+            if (d.optBoolean("Real", false))
+                karte.addView(text("Echtgeld-Probelauf · " + s(d, "Broker") + " · Orders werden nur protokolliert", 12, GELB, false));
             // gesicherter Gewinn und Verlustbremse auch im zugeklappten Zustand
             double ges = d.optDouble("Gesichert", 0);
             if (ges > 0.004 || d.optDouble("GewinnSicherung", 0) > 0)
