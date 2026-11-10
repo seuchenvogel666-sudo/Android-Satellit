@@ -68,7 +68,8 @@ public class MainActivity extends Activity {
     final Handler handler = new Handler(Looper.getMainLooper());
     LinearLayout inhalt;
     TextView kopfStatus;
-    TextView[] reiterKnoepfe = new TextView[3];
+    static final String[] REITER = { "Positionen", "Empfehlungen", "Übungsdepot", "Realdepot", "Auswertung", "Backtest", "System" };
+    TextView[] reiterKnoepfe = new TextView[REITER.length];
     int reiter = 0;
     JSONObject daten;
     String fehler;
@@ -109,7 +110,7 @@ public class MainActivity extends Activity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         prefs = getSharedPreferences("satellit", MODE_PRIVATE);
-        reiter = prefs.getInt("reiter", 0);
+        reiter = Math.max(0, Math.min(REITER.length - 1, prefs.getInt("reiter7", 2)));
         getWindow().setStatusBarColor(HINTERGRUND);
         getWindow().setNavigationBarColor(HINTERGRUND);
 
@@ -143,29 +144,36 @@ public class MainActivity extends Activity {
         kopf.addView(knoepfe);
         wurzel.addView(kopf);
 
-        // Reiter
-        LinearLayout reiterLeiste = new LinearLayout(this);
-        reiterLeiste.setOrientation(LinearLayout.HORIZONTAL);
-        reiterLeiste.setPadding(dp(12), dp(6), dp(12), dp(6));
-        String[] namen = { "Depots", "Empfehlungen", "Positionen" };
-        for (int i = 0; i < 3; i++) {
+        // Reiter wie am PC – in zwei Zeilen, damit nichts seitlich gescrollt werden muss
+        LinearLayout reiterBlock = new LinearLayout(this);
+        reiterBlock.setOrientation(LinearLayout.VERTICAL);
+        reiterBlock.setPadding(dp(12), dp(4), dp(12), dp(4));
+        LinearLayout reiterLeiste = null;
+        for (int i = 0; i < REITER.length; i++) {
+            if (i == 0 || i == 4) {
+                reiterLeiste = new LinearLayout(this);
+                reiterLeiste.setOrientation(LinearLayout.HORIZONTAL);
+                reiterLeiste.setPadding(0, dp(2), 0, dp(2));
+                reiterBlock.addView(reiterLeiste);
+            }
             final int nr = i;
-            TextView t = text(namen[i], 14, TEXT, true);
+            TextView t = text(REITER[i], 13, TEXT, true);
             t.setGravity(Gravity.CENTER);
-            t.setPadding(dp(6), dp(10), dp(6), dp(10));
+            t.setSingleLine(true);
+            t.setPadding(dp(2), dp(9), dp(2), dp(9));
             t.setOnClickListener(new View.OnClickListener() {
                 @Override public void onClick(View v) {
                     reiter = nr;
-                    prefs.edit().putInt("reiter", nr).apply();
+                    prefs.edit().putInt("reiter7", nr).apply();
                     anzeigen();
                 }
             });
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f);
-            lp.setMargins(dp(4), 0, dp(4), 0);
+            lp.setMargins(dp(3), 0, dp(3), 0);
             reiterLeiste.addView(t, lp);
             reiterKnoepfe[i] = t;
         }
-        wurzel.addView(reiterLeiste);
+        wurzel.addView(reiterBlock);
 
         ScrollView scroll = new ScrollView(this);
         inhalt = new LinearLayout(this);
@@ -373,7 +381,7 @@ public class MainActivity extends Activity {
         kopfStatus.setText(s.toString());
         long alter = daten == null ? 0 : System.currentTimeMillis() / 1000 - daten.optLong("StandUnix", 0);
         kopfStatus.setTextColor(daten != null && alter > 600 ? GELB : GRAU);
-        for (int i = 0; i < 3; i++) {
+        for (int i = 0; i < REITER.length; i++) {
             GradientDrawable g = new GradientDrawable();
             g.setCornerRadius(dp(8));
             g.setColor(i == reiter ? BLAU : KARTE);
@@ -410,9 +418,15 @@ public class MainActivity extends Activity {
         long alter = System.currentTimeMillis() / 1000 - daten.optLong("StandUnix", 0);
         if (daten.optLong("StandUnix", 0) > 0 && alter > 600)
             inhalt.addView(hinweis("Der Stand vom PC ist " + (alter / 60) + " Minuten alt. Läuft Aktien-Graphen am PC noch, und stimmt die Uhrzeit?", GELB));
-        if (reiter == 0) depots();
-        else if (reiter == 1) empfehlungen();
-        else positionen();
+        switch (reiter) {
+            case 0: positionen(); break;
+            case 1: empfehlungen(); break;
+            case 2: depots(false); break;
+            case 3: depots(true); break;
+            case 4: auswertung(); break;
+            case 5: backtest(); break;
+            default: system(); break;
+        }
     }
 
     // ---------- NOTAUS: einziger Befehl ans PC-Programm ----------
@@ -543,19 +557,22 @@ public class MainActivity extends Activity {
         inhalt.addView(k);
     }
 
-    void depots() {
+    void depots(boolean real) {
         notausBereich();
-        meldungenBereich();
-        depotListe();
-        einstellungenBereich();
+        if (!real) meldungenBereich();
+        else inhalt.addView(hinweis("Realdepots sind ein Echtgeld-PROBELAUF: Sie handeln mit den Regeln des gewählten Brokers, es fließt aber kein echtes Geld – jede Order wird am PC nur protokolliert.", GELB));
+        depotListe(real);
+        if (!real) einstellungenBereich();
     }
 
-    void depotListe() {
+    void depotListe(boolean real) {
         JSONArray l = daten.optJSONArray("Depots");
-        if (l == null || l.length() == 0) { inhalt.addView(hinweis("Keine Übungsdepots vorhanden.", GRAU)); return; }
+        int n = 0;
+        if (l != null) for (int i = 0; i < l.length(); i++) { JSONObject d = l.optJSONObject(i); if (d != null && d.optBoolean("Real", false) == real) n++; }
+        if (n == 0) { inhalt.addView(hinweis(real ? "Keine Realdepots vorhanden – anlegen am PC im Reiter „Realdepot“." : "Keine Übungsdepots vorhanden.", GRAU)); return; }
         for (int i = 0; i < l.length(); i++) {
             JSONObject d = l.optJSONObject(i);
-            if (d == null) continue;
+            if (d == null || d.optBoolean("Real", false) != real) continue;
             final String name = d.optString("Name", "Depot");
             String w = waehrung(d.optString("Waehrung", "EUR"));
             LinearLayout karte = karte();
@@ -564,7 +581,7 @@ public class MainActivity extends Activity {
             LinearLayout zeile = new LinearLayout(this);
             zeile.setOrientation(LinearLayout.HORIZONTAL);
             zeile.setGravity(Gravity.CENTER_VERTICAL);
-            TextView tn = text((d.optBoolean("Real", false) ? "Realdepot · " : "") + name, 17, TEXT, true);
+            TextView tn = text(name, 17, TEXT, true);
             zeile.addView(tn, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
             JSONObject na0 = daten.optJSONObject("Notaus");
             boolean notaus = na0 != null && na0.optBoolean("Aktiv", false);
@@ -664,6 +681,186 @@ public class MainActivity extends Activity {
         }
         inhalt.addView(text("Tippe auf ein Depot, um es auf- oder zuzuklappen.", 11, GRAU, false));
     }
+
+    // ---------- Reiter Auswertung: Berichte je Zeitraum (mit Schätzung) und Rangliste ----------
+    void auswertung() {
+        JSONObject a = daten.optJSONObject("Auswertung");
+        if (a == null) { inhalt.addView(hinweis("Der PC liefert noch keine Auswertung – bitte Aktien-Graphen am PC aktualisieren.", GELB)); return; }
+        JSONArray r = a.optJSONArray("Rangliste");
+        if (r != null && r.length() > 0) {
+            LinearLayout k = karte();
+            k.addView(text("Rangliste", 16, TEXT, true));
+            for (int i = 0; i < r.length(); i++) {
+                JSONObject p = r.optJSONObject(i);
+                if (p == null) continue;
+                double rd = p.optDouble("Rendite", Double.NaN);
+                k.addView(zweispaltig(p.optInt("Platz", i + 1) + ". " + (p.optBoolean("Real", false) ? "[Real] " : "") + s(p, "Name"), pz(rd), TEXT, farbe(rd)));
+                double pj = p.optDouble("ProJahr", Double.NaN), tq = p.optDouble("Trefferquote", Double.NaN);
+                TextView z = text("läuft " + s(p, "Laufzeit") + (Double.isNaN(pj) ? "" : " · aufs Jahr " + pz(pj)) + " · Rückgang −" + zahl1(p.optDouble("MaxRueckgang", 0)) + " %" +
+                        " · " + p.optInt("Trades", 0) + " Trades" + (Double.isNaN(tq) ? "" : " · Treffer " + zahl0(tq) + " %"), 12, GRAU, false);
+                z.setPadding(0, 0, 0, dp(6));
+                k.addView(z);
+            }
+            inhalt.addView(k);
+        }
+        JSONArray l = a.optJSONArray("Depots");
+        if (l == null || l.length() == 0) { inhalt.addView(hinweis("Noch keine Depots – Berichte erscheinen, sobald am PC ein Depot läuft.", GRAU)); return; }
+        for (int i = 0; i < l.length(); i++) {
+            JSONObject d = l.optJSONObject(i);
+            if (d == null) continue;
+            String w = waehrung(d.optString("Waehrung", "EUR"));
+            LinearLayout k = karte();
+            k.addView(text((d.optBoolean("Real", false) ? "Realdepot · " : "") + s(d, "Name"), 16, TEXT, true));
+            JSONArray b = d.optJSONArray("Berichte");
+            if (b != null) for (int j = 0; j < b.length(); j++) {
+                JSONObject e = b.optJSONObject(j);
+                if (e == null) continue;
+                boolean sch = e.optBoolean("Schaetzung", false);
+                double rd = e.optDouble("Rendite", Double.NaN), erg = e.optDouble("Ergebnis", Double.NaN);
+                k.addView(abschnitt(s(e, "Zeitraum") + (sch ? "  (geschätzt)" : "")));
+                if (e.optBoolean("ZuWenig", false)) { k.addView(text(s(e, "Hinweis").length() > 0 ? s(e, "Hinweis") : "Noch zu wenig Daten.", 12, GRAU, false)); continue; }
+                k.addView(zweispaltig("Rendite" + (sch ? " ≈" : ""), pz(rd) + (Double.isNaN(erg) ? "" : "  (" + (erg >= 0 ? "+" : "−") + geld(Math.abs(erg), w) + ")"), GRAU, sch ? GELB : farbe(rd)));
+                if (sch) k.addView(zweispaltig("Spanne (wahrscheinlich)", pz(e.optDouble("SpanneVon", Double.NaN)) + " bis " + pz(e.optDouble("SpanneBis", Double.NaN)), GRAU, GELB));
+                else if (!e.isNull("Vergleich")) k.addView(zweispaltig("Vergleich " + s(e, "VergleichName"), pz(e.optDouble("Vergleich", Double.NaN)), GRAU, farbe(e.optDouble("Vergleich", Double.NaN))));
+                k.addView(zweispaltig("Größter Rückgang · Käufe/Verkäufe", "−" + zahl1(e.optDouble("MaxRueckgang", 0)) + " % · " + zahl0(e.optDouble("Kaeufe", 0)) + "/" + zahl0(e.optDouble("Verkaeufe", 0)), GRAU, TEXT));
+                double tq = e.optDouble("Trefferquote", Double.NaN);
+                k.addView(zweispaltig("Trefferquote · Gebühren · Steuer", (Double.isNaN(tq) ? "–" : zahl0(tq) + " %") + " · " + geld(e.optDouble("Gebuehren", 0), w) + " · " + geld(e.optDouble("Steuer", 0), w), GRAU, TEXT));
+                if (e.optDouble("Gesichert", 0) > 0.004) k.addView(zweispaltig("Gesichert", geld(e.optDouble("Gesichert", 0), w), GRAU, GRUEN));
+            }
+            inhalt.addView(k);
+        }
+    }
+
+    // ---------- Reiter Backtest: letztes Ergebnis vom PC (gestartet wird nur am PC) ----------
+    void backtest() {
+        JSONObject b = daten.optJSONObject("Backtest");
+        if (b == null) { inhalt.addView(hinweis("Der PC liefert noch keine Backtest-Daten – bitte Aktien-Graphen am PC aktualisieren.", GELB)); return; }
+        String status = s(b, "Status");
+        inhalt.addView(hinweis((b.optBoolean("Laeuft", false) ? "⏳ " : "") + (status.length() > 0 ? status : "Noch kein Backtest gerechnet.") +
+                "\nGestartet wird der Backtest am PC (Reiter „Backtest“) – hier siehst du das Ergebnis.", b.optBoolean("Laeuft", false) ? GELB : GRAU));
+        if (!b.has("Name")) return;
+        String w = waehrung(b.optString("Waehrung", "EUR"));
+        LinearLayout k = karte();
+        int n = b.optInt("Durchlaeufe", 1);
+        k.addView(text("Backtest: „" + s(b, "Name") + "“ · " + b.optInt("Tage", 0) + " Tage", 16, TEXT, true));
+        if (n > 1) k.addView(text("mittlerer Durchlauf (Nr. " + b.optInt("MittelNr", 1) + " von " + n + ")", 12, GRAU, false));
+        k.addView(text(s(b, "Einstellungen"), 12, GRAU, false));
+        double rd = b.optDouble("Rendite", Double.NaN);
+        k.addView(text(geld(b.optDouble("Startkapital", 0), w) + " → " + geld(b.optDouble("Endwert", 0), w), 20, TEXT, true));
+        k.addView(text(pz(rd), 15, farbe(rd), true));
+        JSONArray v = b.optJSONArray("Verlauf");
+        if (v != null && v.length() >= 2) {
+            double[] t = new double[v.length()], y = new double[v.length()];
+            for (int i = 0; i < v.length(); i++) { JSONArray p = v.optJSONArray(i); t[i] = p == null ? 0 : p.optDouble(0, 0); y[i] = p == null ? 0 : p.optDouble(1, 0); }
+            Verlaufsgraph g = new Verlaufsgraph(this, t, y, b.optDouble("Startkapital", y[0]));
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(150));
+            lp.setMargins(0, dp(8), 0, dp(4));
+            k.addView(g, lp);
+        }
+        double tq = b.optDouble("Trefferquote", Double.NaN);
+        k.addView(zweispaltig("Größter Rückgang", "−" + zahl1(b.optDouble("MaxRueckgang", 0)) + " %", GRAU, TEXT));
+        k.addView(zweispaltig("Käufe / Verkäufe · Treffer", b.optInt("Kaeufe", 0) + " / " + b.optInt("Verkaeufe", 0) + (Double.isNaN(tq) ? "" : " · " + zahl0(tq) + " %"), GRAU, TEXT));
+        if (s(b, "DatenInfo").length() > 0) k.addView(text(s(b, "DatenInfo"), 11, GRAU, false));
+        inhalt.addView(k);
+
+        JSONObject vg = b.optJSONObject("Vergleich");
+        if (vg != null) {
+            LinearLayout kv = karte();
+            kv.addView(text("Gegenprobe: Zufall und „einfach halten“", 15, TEXT, true));
+            kv.addView(text(s(vg, "Urteil"), 13, BLAU, false));
+            kv.addView(zweispaltig("Deine Einstellungen", pz(vg.optDouble("Strategie", Double.NaN)), GRAU, farbe(vg.optDouble("Strategie", Double.NaN))));
+            kv.addView(zweispaltig("Zufallshandel (Median)", pz(vg.optDouble("ZufallMedian", Double.NaN)), GRAU, farbe(vg.optDouble("ZufallMedian", Double.NaN))));
+            kv.addView(zweispaltig("Zufall: schlechtester … bester", pz(vg.optDouble("ZufallMin", Double.NaN)) + " … " + pz(vg.optDouble("ZufallMax", Double.NaN)), GRAU, TEXT));
+            kv.addView(zweispaltig("Besser als Zufall", vg.optInt("BesserAlsZufall", 0) + " von " + vg.optInt("Zufaelle", 0), GRAU, TEXT));
+            JSONArray etfs = vg.optJSONArray("Etfs");
+            if (etfs != null) for (int i = 0; i < etfs.length(); i++) {
+                JSONObject e = etfs.optJSONObject(i);
+                if (e != null) kv.addView(zweispaltig("Halten: " + s(e, "Name"), pz(e.optDouble("Rendite", Double.NaN)), GRAU, farbe(e.optDouble("Rendite", Double.NaN))));
+            }
+            inhalt.addView(kv);
+        }
+        JSONObject em = b.optJSONObject("Empfehlung");
+        if (em != null) {
+            LinearLayout ke = karte();
+            ke.addView(text("Empfehlung: beste Einstellungen", 15, TEXT, true));
+            ke.addView(text(s(em, "Urteil"), 13, em.optBoolean("Robust", false) ? GRUEN : GELB, false));
+            JSONArray ae = em.optJSONArray("Aenderungen");
+            if (ae != null) for (int i = 0; i < ae.length(); i++) {
+                JSONObject a = ae.optJSONObject(i);
+                if (a != null) ke.addView(zweispaltig(s(a, "Name"), s(a, "Bisher") + " → " + s(a, "Neu"), GRAU, GRUEN));
+            }
+            ke.addView(text("Übernehmen geht am PC („Empfehlung als neues Depot anlegen“).", 11, GRAU, false));
+            inhalt.addView(ke);
+        }
+        JSONObject st = b.optJSONObject("Statistik");
+        if (st != null) {
+            LinearLayout ks = karte();
+            ks.addView(text("Abweichung über " + st.optInt("N", 0) + " Durchläufe", 15, TEXT, true));
+            ks.addView(text(s(st, "Urteil"), 13, BLAU, false));
+            ks.addView(zweispaltig("Rendite Ø / Median", pz(st.optDouble("Mittel", Double.NaN)) + " / " + pz(st.optDouble("Median", Double.NaN)), GRAU, farbe(st.optDouble("Median", Double.NaN))));
+            ks.addView(zweispaltig("Schlechtester … bester", pz(st.optDouble("Min", Double.NaN)) + " … " + pz(st.optDouble("Max", Double.NaN)), GRAU, TEXT));
+            ks.addView(zweispaltig("Streuung", "± " + zahl1(st.optDouble("Std", 0)) + " Punkte", GRAU, TEXT));
+            ks.addView(zweispaltig("Im Gewinn · gleiche Käufe", zahl0(st.optDouble("AnteilGewinn", 0)) + " % · " + zahl0(st.optDouble("Uebereinstimmung", 0)) + " %", GRAU, TEXT));
+            JSONArray la = st.optJSONArray("Laeufe");
+            if (la != null) for (int i = 0; i < la.length(); i++) {
+                JSONObject l = la.optJSONObject(i);
+                if (l == null) continue;
+                double r = l.optDouble("Rendite", Double.NaN);
+                ks.addView(zweispaltig("Durchlauf " + l.optInt("Nr", 0) + (l.optInt("Versatz", 0) > 0 ? " (+" + l.optInt("Versatz", 0) + " Std.)" : " (echte Kurse)") + " · " + l.optInt("Trades", 0) + " Trades",
+                        pz(r), GRAU, farbe(r)));
+            }
+            inhalt.addView(ks);
+        }
+        JSONArray ps = b.optJSONArray("Positionen");
+        LinearLayout kp = karte();
+        kp.addView(text("Portfolio am Ende des Backtests", 15, TEXT, true));
+        if (ps == null || ps.length() == 0) kp.addView(text("Am Ende war alles verkauft – nur Bargeld.", 13, GRAU, false));
+        else for (int i = 0; i < ps.length(); i++) {
+            JSONObject p = ps.optJSONObject(i);
+            if (p == null) continue;
+            double r = p.optDouble("Rendite", Double.NaN);
+            kp.addView(zweispaltig(s(p, "Name") + (p.optBoolean("Short", false) ? " (Short)" : ""), geld(p.optDouble("Wert", 0), w) + "  " + pz(r), TEXT, farbe(r)));
+            TextView z = text("24 Std. " + pz(p.optDouble("Ver24", Double.NaN)) + " · 7 Tage " + pz(p.optDouble("Ver7", Double.NaN)) + " · " + s(p, "Richtung") + " · " + s(p, "Zustand"), 12, GRAU, false);
+            z.setPadding(0, 0, 0, dp(6));
+            kp.addView(z);
+        }
+        kp.addView(text("Bargeld " + geld(b.optDouble("Bargeld", 0), w) + (b.optDouble("Gesichert", 0) > 0.004 ? " · gesichert " + geld(b.optDouble("Gesichert", 0), w) : ""), 12, GRAU, false));
+        inhalt.addView(kp);
+    }
+
+    // ---------- Reiter System: Gesundheit, Notaus, Datensicherung ----------
+    void system() {
+        notausBereich();
+        JSONObject sy = daten.optJSONObject("System");
+        if (sy == null) { inhalt.addView(hinweis("Der PC liefert noch keine System-Daten – bitte Aktien-Graphen am PC aktualisieren.", GELB)); return; }
+        LinearLayout k = karte();
+        k.addView(text("Gesundheit", 16, TEXT, true));
+        JSONArray g = sy.optJSONArray("Gesundheit");
+        if (g != null) for (int i = 0; i < g.length(); i++) {
+            JSONObject p = g.optJSONObject(i);
+            if (p == null) continue;
+            int st = p.optInt("Stufe", 0);
+            int f = st >= 2 ? ROT : st == 1 ? GELB : st == 0 ? GRUEN : GRAU;
+            k.addView(text("●  " + s(p, "Name"), 14, f, true));
+            TextView z = text(s(p, "Text"), 12, GRAU, false);
+            z.setPadding(dp(20), 0, 0, dp(6));
+            k.addView(z);
+        }
+        inhalt.addView(k);
+        LinearLayout ks = karte();
+        ks.addView(text("Datensicherung", 16, TEXT, true));
+        JSONArray l = sy.optJSONArray("Sicherungen");
+        if (l == null || l.length() == 0) ks.addView(text("Noch keine Sicherung.", 13, GRAU, false));
+        else for (int i = 0; i < l.length(); i++) ks.addView(text(l.optString(i, ""), 12, GRAU, false));
+        ks.addView(text("Sichern und Wiederherstellen geht am PC (Reiter „System“).", 11, GRAU, false));
+        inhalt.addView(ks);
+        einstellungenBereich();
+    }
+
+    static int farbe(double v) { return Double.isNaN(v) ? GRAU : v >= 0 ? GRUEN : ROT; }
+    static String pz(double v) { return Double.isNaN(v) ? "–" : prozent(v); }
+    static String zahl0(double v) { return String.format(Locale.GERMANY, "%.0f", v); }
+    static String zahl1(double v) { return String.format(Locale.GERMANY, "%.1f", v); }
 
     void empfehlungen() {
         JSONObject e = daten.optJSONObject("Empfehlungen");
