@@ -21,7 +21,7 @@ jobs:
 
       # Das Android-SDK ist auf den GitHub-Rechnern bereits installiert (ANDROID_HOME)
       - name: Android-SDK prüfen
-        run: echo "SDK: $ANDROID_HOME" && ls "$ANDROID_HOME/platforms" | tail -3
+        run: 'echo "SDK-Ordner $ANDROID_HOME"; ls "$ANDROID_HOME/platforms" | tail -3'
 
       - uses: gradle/actions/setup-gradle@v4
         with:
