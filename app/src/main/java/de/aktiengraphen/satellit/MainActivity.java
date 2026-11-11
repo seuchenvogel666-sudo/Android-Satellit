@@ -49,7 +49,6 @@ import java.util.Set;
  * Meldungen (Verlustbremse, großer Gewinn, Stillstand, Notaus, Tagesbericht, PC offline) kommen als Benachrichtigung –
  * abgeholt etwa alle 15 Minuten, ebenfalls nur im Heimnetz.
  */
-public class MainActivity extends Activity {
 public class MainActivity extends ReiterMarkt {
 
 
