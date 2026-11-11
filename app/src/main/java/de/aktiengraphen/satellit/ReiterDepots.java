@@ -71,7 +71,8 @@ abstract class ReiterDepots extends Basis {
             zeile.addView(tn, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
             JSONObject na0 = daten.optJSONObject("Notaus");
             boolean notaus = na0 != null && na0.optBoolean("Aktiv", false);
-            TextView aktiv = text(notaus ? "NOTAUS" : d.optBoolean("Aktiv", true) ? "aktiv" : "pausiert", 11, notaus ? ROT : d.optBoolean("Aktiv", true) ? GRUEN : GELB, true);
+            TextView aktiv = chip(notaus ? "NOTAUS" : d.optBoolean("Gebremst", false) && d.optBoolean("Aktiv", true) ? "gebremst" : d.optBoolean("Aktiv", true) ? "aktiv" : "pausiert",
+                    notaus || (d.optBoolean("Gebremst", false) && d.optBoolean("Aktiv", true)) ? ROT : d.optBoolean("Aktiv", true) ? GRUEN : GELB);
             zeile.addView(aktiv);
             karte.addView(zeile);
             karte.addView(text(geld(d.optDouble("Wert", 0), w), 26, TEXT, true));

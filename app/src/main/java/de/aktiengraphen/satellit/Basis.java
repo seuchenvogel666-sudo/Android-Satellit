@@ -59,7 +59,7 @@ abstract class Basis extends Activity {
     SharedPreferences prefs;
     final Handler handler = new Handler(Looper.getMainLooper());
     LinearLayout inhalt;
-    TextView kopfStatus;
+    TextView kopfStatus, kopfPunkt;
     static final String[] REITER = { "Positionen", "Empfehlungen", "Übungsdepot", "Realdepot", "Auswertung", "Backtest", "System" };
     TextView[] reiterKnoepfe = new TextView[REITER.length];
     int reiter = 0;
@@ -121,8 +121,10 @@ abstract class Basis extends Activity {
     }
 
     TextView knopf(String s) {
-        TextView t = text(s, 14, Color.WHITE, true);
-        t.setPadding(dp(14), dp(8), dp(14), dp(8));
+        TextView t = text(s, 13, Color.WHITE, true);
+        t.setGravity(Gravity.CENTER);
+        t.setSingleLine(true);
+        t.setPadding(dp(10), dp(7), dp(10), dp(7));
         GradientDrawable g = new GradientDrawable();
         g.setCornerRadius(dp(8));
         g.setColor(KARTE_HELL);
@@ -147,6 +149,14 @@ abstract class Basis extends Activity {
 
     View hinweis(String s, int farbe) {
         LinearLayout k = karte();
+        // farbige Hinweise (rot/gelb/grün/blau) mit getöntem Hintergrund und farbigem Rand – auf einen Blick erkennbar
+        if (farbe != TEXT && farbe != GRAU) {
+            GradientDrawable g = new GradientDrawable();
+            g.setCornerRadius(dp(12));
+            g.setColor(Color.argb(40, Color.red(farbe), Color.green(farbe), Color.blue(farbe)));
+            g.setStroke(dp(1), Color.argb(150, Color.red(farbe), Color.green(farbe), Color.blue(farbe)));
+            k.setBackground(g);
+        }
         TextView t = text(s, 14, farbe, false);
         t.setLineSpacing(0, 1.15f);
         k.addView(t);
@@ -154,8 +164,21 @@ abstract class Basis extends Activity {
     }
 
     TextView abschnitt(String s) {
-        TextView t = text(s, 14, TEXT, true);
-        t.setPadding(0, dp(12), 0, dp(2));
+        TextView t = text(s, 13, BLAU, true);
+        t.setLetterSpacing(0.04f);
+        t.setPadding(0, dp(14), 0, dp(4));
+        return t;
+    }
+
+    // kleiner farbiger Status-Chip (wie am PC), z. B. „aktiv“, „pausiert“, „NOTAUS“
+    TextView chip(String s, int farbe) {
+        TextView t = text(s, 11, farbe, true);
+        t.setPadding(dp(10), dp(2), dp(10), dp(3));
+        GradientDrawable g = new GradientDrawable();
+        g.setCornerRadius(dp(10));
+        g.setColor(Color.argb(55, Color.red(farbe), Color.green(farbe), Color.blue(farbe)));
+        g.setStroke(dp(1), farbe);
+        t.setBackground(g);
         return t;
     }
 

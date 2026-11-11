@@ -92,7 +92,13 @@ abstract class ReiterMarkt extends ReiterAnalyse {
             JSONObject p = l.optJSONObject(i);
             if (p == null) continue;
             double ae = p.isNull("Aenderung") ? Double.NaN : p.optDouble("Aenderung", Double.NaN);
-            karte.addView(zweispaltig(s(p, "Name") + "  " + s(p, "Symbol"), s(p, "Kurs"), TEXT, TEXT));
+            // Name kräftig, Kurs groß; Symbol klein und grau darunter
+            LinearLayout kopfZ = zweispaltig(s(p, "Name"), s(p, "Kurs"), TEXT, TEXT);
+            ((TextView) kopfZ.getChildAt(0)).setTextSize(TypedValue.COMPLEX_UNIT_SP, 15);
+            ((TextView) kopfZ.getChildAt(0)).setTypeface(android.graphics.Typeface.DEFAULT_BOLD);
+            ((TextView) kopfZ.getChildAt(1)).setTextSize(TypedValue.COMPLEX_UNIT_SP, 16);
+            karte.addView(kopfZ);
+            karte.addView(text(s(p, "Symbol"), 11, GRAU, false));
             String empf = s(p, "Empfehlung");
             String links = empf.length() > 0 ? (p.isNull("Punkte") ? "" : p.optInt("Punkte", 50) + "  ") + empf : "";
             int fe = empf.equals("kaufen") ? GRUEN : empf.equals("verkaufen") ? ROT : GELB;

@@ -74,26 +74,35 @@ public class MainActivity extends ReiterMarkt {
         // Kopf: Titel, Stand, Knöpfe
         LinearLayout kopf = new LinearLayout(this);
         kopf.setOrientation(LinearLayout.VERTICAL);
-        kopf.setPadding(dp(16), dp(14), dp(16), dp(6));
-        TextView titel = text("Aktien-Satellit", 22, TEXT, true);
-        kopf.addView(titel);
+        kopf.setPadding(dp(16), dp(12), dp(16), dp(4));
+        // Titel und Verbindungspunkt in einer Zeile (grün = aktuell, gelb = alt, rot = keine Verbindung)
+        LinearLayout titelZeile = new LinearLayout(this);
+        titelZeile.setOrientation(LinearLayout.HORIZONTAL);
+        titelZeile.setGravity(Gravity.CENTER_VERTICAL);
+        kopfPunkt = text("●", 14, GRAU, false);
+        kopfPunkt.setPadding(0, 0, dp(8), 0);
+        titelZeile.addView(kopfPunkt);
+        titelZeile.addView(text("Aktien-Satellit", 20, TEXT, true));
+        kopf.addView(titelZeile);
         kopfStatus = text("", 12, GRAU, false);
+        kopfStatus.setPadding(0, dp(2), 0, 0);
         kopf.addView(kopfStatus);
 
         LinearLayout knoepfe = new LinearLayout(this);
         knoepfe.setOrientation(LinearLayout.HORIZONTAL);
         knoepfe.setPadding(0, dp(8), 0, 0);
-        TextView neu = knopf("Neu laden");
+        TextView neu = knopf("↻ Laden");
         neu.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { laden(); } });
-        TextView koppeln = knopf("QR-Code scannen");
+        TextView koppeln = knopf("⌗ Koppeln (QR)");
         koppeln.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { scannen(); } });
         TextView trennen = knopf("Trennen");
         trennen.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { trennenFragen(); } });
-        knoepfe.addView(neu);
-        knoepfe.addView(new View(this), new LinearLayout.LayoutParams(dp(8), 1));
-        knoepfe.addView(koppeln);
-        knoepfe.addView(new View(this), new LinearLayout.LayoutParams(dp(8), 1));
-        knoepfe.addView(trennen);
+        // drei gleich breite Knöpfe – passen auch auf schmale Handys in eine Zeile
+        knoepfe.addView(neu, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        knoepfe.addView(new View(this), new LinearLayout.LayoutParams(dp(6), 1));
+        knoepfe.addView(koppeln, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.3f));
+        knoepfe.addView(new View(this), new LinearLayout.LayoutParams(dp(6), 1));
+        knoepfe.addView(trennen, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
         kopf.addView(knoepfe);
         wurzel.addView(kopf);
 
@@ -110,10 +119,11 @@ public class MainActivity extends ReiterMarkt {
                 reiterBlock.addView(reiterLeiste);
             }
             final int nr = i;
-            TextView t = text(REITER[i], 13, TEXT, true);
+            TextView t = text(REITER[i], 12.5f, TEXT, true);
             t.setGravity(Gravity.CENTER);
             t.setSingleLine(true);
-            t.setPadding(dp(2), dp(9), dp(2), dp(9));
+            t.setEllipsize(android.text.TextUtils.TruncateAt.END);
+            t.setPadding(dp(2), dp(7), dp(2), dp(7));
             t.setOnClickListener(new View.OnClickListener() {
                 @Override public void onClick(View v) {
                     reiter = nr;
@@ -329,11 +339,11 @@ public class MainActivity extends ReiterMarkt {
         } else if (prefs.getString("kopplung", null) == null) s.append("Nicht gekoppelt");
         else if (!imHeimnetz) s.append("Nicht im Heimnetz – keine Verbindung");
         else s.append("Noch keine Daten");
-        s.append(" · Ansicht + Notaus");
         if (laedt) s.append(" · lädt …");
         kopfStatus.setText(s.toString());
         long alter = daten == null ? 0 : System.currentTimeMillis() / 1000 - daten.optLong("StandUnix", 0);
         kopfStatus.setTextColor(daten != null && alter > 600 ? GELB : GRAU);
+        kopfPunkt.setTextColor(fehler != null || !imHeimnetz ? ROT : daten == null ? GRAU : alter > 600 ? GELB : GRUEN);
         for (int i = 0; i < REITER.length; i++) {
             GradientDrawable g = new GradientDrawable();
             g.setCornerRadius(dp(8));
@@ -346,7 +356,7 @@ public class MainActivity extends ReiterMarkt {
     void anzeigen() {
         aktualisiereKopf();
         inhalt.removeAllViews();
-        if (fehler != null) inhalt.addView(hinweis(fehler, ROT));
+        if (fehler != null) inhalt.addView(hinweis("⚠  Keine Verbindung zum PC\n" + fehler, ROT));
         if (warten != null && prefs.getString("kopplung", null) != null) inhalt.addView(hinweis("⏳ " + warten, GELB));
         if (prefs.getString("kopplung", null) == null) {
             inhalt.addView(hinweis("Willkommen! So koppelst du den Satelliten mit deinem PC:\n\n" +
