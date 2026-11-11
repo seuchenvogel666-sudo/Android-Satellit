@@ -847,6 +847,7 @@ public class MainActivity extends Activity {
             k.addView(z);
         }
         inhalt.addView(k);
+        abfragenKarte(sy.optJSONObject("Abfragen"));
         LinearLayout ks = karte();
         ks.addView(text("Datensicherung", 16, TEXT, true));
         JSONArray l = sy.optJSONArray("Sicherungen");
@@ -855,6 +856,60 @@ public class MainActivity extends Activity {
         ks.addView(text("Sichern und Wiederherstellen geht am PC (Reiter „System“).", 11, GRAU, false));
         inhalt.addView(ks);
         einstellungenBereich();
+    }
+
+    // Abfragen & Auslastung: wie intensiv der PC gerade Daten abfragt (erlaubt / eingestellt / verbraucht)
+    void abfragenKarte(JSONObject a) {
+        if (a == null) return;
+        LinearLayout k = karte();
+        int st = a.optInt("Stufe", 0);
+        int f = st >= 3 ? ROT : st == 2 ? GELB : st == 1 ? BLAU : GRUEN;
+        k.addView(text("Abfragen & Auslastung", 16, TEXT, true));
+        k.addView(text(s(a, "StufeText"), 14, f, true));
+        int std = a.optInt("YahooStd", 0), rw = Math.max(1, a.optInt("Richtwert", 2000));
+        double anteil = Math.min(1.0, std / (double) rw);
+        LinearLayout balken = new LinearLayout(this);
+        balken.setOrientation(LinearLayout.HORIZONTAL);
+        GradientDrawable hg = new GradientDrawable(); hg.setColor(KARTE_HELL); hg.setCornerRadius(dp(4));
+        balken.setBackground(hg);
+        View voll = new View(this);
+        GradientDrawable vg = new GradientDrawable(); vg.setColor(f); vg.setCornerRadius(dp(4));
+        voll.setBackground(vg);
+        balken.addView(voll, new LinearLayout.LayoutParams(0, dp(10), (float) Math.max(0.01, anteil)));
+        balken.addView(new View(this), new LinearLayout.LayoutParams(0, dp(10), (float) Math.max(0.0, 1 - anteil)));
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(10));
+        lp.setMargins(0, dp(8), 0, dp(4));
+        k.addView(balken, lp);
+        k.addView(text("Yahoo, letzte 60 Min.: " + std + " Abfragen (" + Math.round(100.0 * std / rw) + " % vom Richtwert ≈ " + rw + "/Std.*)", 12, TEXT, false));
+        double gp = a.optDouble("YahooGeplant", 0);
+        k.addView(text("Eingestellt bei Yahoo: " + (gp < 0.5 ? "–" : "≈ " + zahl0(gp) + "/Std."), 12, GRAU, false));
+        String pause = s(a, "Pause");
+        if (pause.length() > 0) k.addView(text("⏸ Yahoo sperrt gerade (zu viele Abfragen) – Pause bis " + pause + " Uhr.", 12, ROT, true));
+        abfragenListe(k, a.optJSONArray("Quellen"), "Nach Datenquelle", true);
+        abfragenListe(k, a.optJSONArray("Zwecke"), "Wofür", false);
+        k.addView(text("* Yahoo nennt keine offizielle Grenze; ≈ 2.000/Std. ist ein Erfahrungswert. „Eingestellt“ = was die aktuellen Einstellungen höchstens anfordern.", 11, GRAU, false));
+        inhalt.addView(k);
+    }
+
+    void abfragenListe(LinearLayout k, JSONArray l, String titel, boolean erlaubt) {
+        if (l == null || l.length() == 0) return;
+        TextView t = text(titel, 14, TEXT, true);
+        t.setPadding(0, dp(10), 0, dp(2));
+        k.addView(t);
+        for (int i = 0; i < l.length(); i++) {
+            JSONObject r = l.optJSONObject(i);
+            if (r == null) continue;
+            k.addView(text(s(r, "Name"), 13, TEXT, true));
+            double gp = r.optDouble("Geplant", 0);
+            String z = (erlaubt ? "erlaubt " + s(r, "Erlaubt") + " · " : "")
+                     + "eingestellt " + (gp < 0.5 ? "–" : "≈ " + zahl0(gp) + "/Std.")
+                     + " · 60 Min.: " + r.optInt("Std", 0) + " · 24 Std.: " + r.optInt("Tag", 0);
+            int fe = r.optInt("Fehler", 0), sp = r.optInt("Sperren", 0);
+            if (fe > 0) z += " · Fehler: " + fe + (sp > 0 ? " (" + sp + "× 429)" : "");
+            TextView zt = text(z, 12, sp > 0 ? GELB : GRAU, false);
+            zt.setPadding(dp(12), 0, 0, dp(4));
+            k.addView(zt);
+        }
     }
 
     static int farbe(double v) { return Double.isNaN(v) ? GRAU : v >= 0 ? GRUEN : ROT; }
