@@ -265,7 +265,7 @@ abstract class ReiterAnalyse extends ReiterDepots {
         if (pause.length() > 0) k.addView(text("⏸ Yahoo sperrt gerade (zu viele Abfragen) – Pause bis " + pause + " Uhr.", 12, ROT, true));
         abfragenListe(k, a.optJSONArray("Quellen"), "Nach Datenquelle", true);
         abfragenListe(k, a.optJSONArray("Zwecke"), "Wofür", false);
-        k.addView(text("* Yahoo nennt keine offizielle Grenze; ≈ 2.000/Std. ist ein Erfahrungswert. „Eingestellt“ = was die aktuellen Einstellungen höchstens anfordern. Rangfolge bei Knappheit: Markt-Scanner > Übungsdepot > Realdepot > Positionen.", 11, GRAU, false));
+        k.addView(text("* Yahoo nennt keine offizielle Grenze; ≈ 2.000/Std. ist ein Erfahrungswert. „Eingestellt“ = was die aktuellen Einstellungen höchstens anfordern. Rangfolge bei Knappheit: Markt-Scanner > Nachholen > Übungsdepot > Realdepot > Positionen.", 11, GRAU, false));
         inhalt.addView(k);
     }
 
