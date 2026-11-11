@@ -248,6 +248,7 @@ abstract class ReiterAnalyse extends ReiterDepots {
             String at = "Automatik AN · Ziel „" + s(a, "Ziel") + "“ · Tempo " + a.optInt("Tempo", 100) + " % → ≈ " + a.optInt("ZielJetzt", 0) + "/Std.";
             int gr = a.optInt("Grenze", 0);
             if (gr > 0) at += " · Obergrenze ≈ " + gr + "/Std.";
+            if (a.optDouble("Streckung", 1) > 1.05) at += " · Kurse seltener (Abstände ×" + String.format(java.util.Locale.GERMANY, "%.1f", a.optDouble("Streckung", 1)) + ")";
             k.addView(text(at, 12, BLAU, true));
             JSONArray v = a.optJSONArray("Verlauf");
             if (v != null) for (int i = 0; i < v.length() && i < 3; i++) {
@@ -255,7 +256,11 @@ abstract class ReiterAnalyse extends ReiterDepots {
                 tv.setPadding(dp(12), 0, 0, 0);
                 k.addView(tv);
             }
-        } else k.addView(text("Automatik aus – feste Grenzen (am PC einschaltbar: Einstellungen › Datenabfragen).", 11, GRAU, false));
+        } else {
+            String fest = "Automatik aus – feste Obergrenze" + (a.optInt("ZielWirksam", 0) > 0 ? " ≈ " + a.optInt("ZielWirksam", 0) + "/Std." : "");
+            if (a.optDouble("Streckung", 1) > 1.05) fest += " · Kurse seltener (Abstände ×" + String.format(java.util.Locale.GERMANY, "%.1f", a.optDouble("Streckung", 1)) + ")";
+            k.addView(text(fest + " (am PC: Einstellungen › Datenabfragen).", 11, GRAU, false));
+        }
         String pause = s(a, "Pause");
         if (pause.length() > 0) k.addView(text("⏸ Yahoo sperrt gerade (zu viele Abfragen) – Pause bis " + pause + " Uhr.", 12, ROT, true));
         abfragenListe(k, a.optJSONArray("Quellen"), "Nach Datenquelle", true);
