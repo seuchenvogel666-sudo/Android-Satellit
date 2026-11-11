@@ -83,6 +83,8 @@ public class MainActivity extends ReiterMarkt {
         kopfPunkt.setPadding(0, 0, dp(8), 0);
         titelZeile.addView(kopfPunkt);
         titelZeile.addView(text("Aktien-Satellit", 20, TEXT, true));
+        TextView ver = text("  v" + appVersion(), 12, GRAU, false);   // Versionsnummer sichtbar neben dem Titel
+        titelZeile.addView(ver);
         kopf.addView(titelZeile);
         kopfStatus = text("", 12, GRAU, false);
         kopfStatus.setPadding(0, dp(2), 0, 0);
@@ -333,6 +335,8 @@ public class MainActivity extends ReiterMarkt {
             s.append("Stand ").append(daten.optString("Stand", "–"));
             String pc = s(daten, "Rechner");
             if (pc.length() > 0) s.append(" · PC ").append(pc);
+            String pv = s(daten, "PcVersion");
+            if (pv.length() > 0) s.append(" (Programm ").append(pv).append(")");
             long alter = System.currentTimeMillis() / 1000 - daten.optLong("StandUnix", 0);
             if (daten.optLong("StandUnix", 0) > 0 && alter > 600)
                 s.append(" · ").append(alter / 60).append(" Min. alt");

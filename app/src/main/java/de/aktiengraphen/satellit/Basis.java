@@ -199,6 +199,11 @@ abstract class Basis extends Activity {
         return o == null || o.isNull(feld) ? "" : o.optString(feld, "");
     }
 
+    // Versionsnummer dieser App (aus app/build.gradle, versionName)
+    String appVersion() {
+        try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionName; } catch (Exception e) { return "?"; }
+    }
+
     static String waehrung(String w) {
         return "USD".equals(w) ? "$" : "€";
     }
