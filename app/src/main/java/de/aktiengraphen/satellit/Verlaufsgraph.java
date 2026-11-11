@@ -20,6 +20,10 @@ public class Verlaufsgraph extends View {
 
     final double[] t, y;
     final double start;
+    double[][] marken;   // Trades: {Zeit, 1 = Kauf / 0 = Verkauf, 1 = nachgeholt}
+    final Paint marke = new Paint(Paint.ANTI_ALIAS_FLAG);
+
+    public void setzeMarken(double[][] m) { marken = m; invalidate(); }
     final Paint linie = new Paint(Paint.ANTI_ALIAS_FLAG);
     final Paint flaeche = new Paint(Paint.ANTI_ALIAS_FLAG);
     final Paint startLinie = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -74,6 +78,28 @@ public class Verlaufsgraph extends View {
         flaeche.setShader(new LinearGradient(0, oben, 0, unten, Color.argb(110, 77, 163, 255), Color.argb(10, 77, 163, 255), Shader.TileMode.CLAMP));
         c.drawPath(f, flaeche);
         c.drawPath(p, linie);
+
+        // Trades als Dreiecke auf der Linie: Kauf ▲ grün (darunter), Verkauf ▼ rot (darüber), nachgeholt nur umrandet
+        if (marken != null) {
+            float s = px(5);
+            for (double[] m : marken) {
+                if (m == null || m.length < 3 || m[0] < t0 || m[0] > t1) continue;
+                int i = 0;
+                while (i < t.length - 1 && t[i + 1] <= m[0]) i++;
+                double wert = y[i];
+                if (i < t.length - 1 && t[i + 1] > t[i]) wert = y[i] + (y[i + 1] - y[i]) * (m[0] - t[i]) / (t[i + 1] - t[i]);
+                float x = (float) ((m[0] - t0) / (t1 - t0) * rechts);
+                float yy = (float) (unten - (wert - min) / (max - min) * (unten - oben));
+                boolean kauf = m[1] > 0.5;
+                float d0 = kauf ? yy + s * 0.6f : yy - s * 0.6f, d1 = kauf ? d0 + s * 1.6f : d0 - s * 1.6f;
+                Path tr = new Path();
+                tr.moveTo(x, d0); tr.lineTo(x - s, d1); tr.lineTo(x + s, d1); tr.close();
+                marke.setColor(kauf ? Color.rgb(61, 220, 132) : Color.rgb(255, 92, 92));
+                marke.setStyle(m[2] > 0.5 ? Paint.Style.STROKE : Paint.Style.FILL);
+                marke.setStrokeWidth(px(1.4f));
+                c.drawPath(tr, marke);
+            }
+        }
 
         if (!Double.isNaN(start) && start > 0) {
             float ys = (float) (unten - (start - min) / (max - min) * (unten - oben));

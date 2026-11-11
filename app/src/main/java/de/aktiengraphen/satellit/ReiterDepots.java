@@ -98,6 +98,17 @@ abstract class ReiterDepots extends Basis {
 
             String status = s(d, "Status");
             if (status.length() > 0) karte.addView(text("Status: " + status, 12, BLAU, false));
+            // Nachholen läuft: Fortschrittsbalken
+            int nh = d.optInt("Nachholen", -1);
+            if (nh >= 0) {
+                android.widget.ProgressBar pb = new android.widget.ProgressBar(this, null, android.R.attr.progressBarStyleHorizontal);
+                pb.setMax(100);
+                pb.setProgress(Math.max(3, nh));
+                pb.setProgressTintList(android.content.res.ColorStateList.valueOf(BLAU));
+                LinearLayout.LayoutParams lpb = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(6));
+                lpb.setMargins(0, dp(4), 0, dp(2));
+                karte.addView(pb, lpb);
+            }
 
             // Verlauf
             JSONArray v = d.optJSONArray("Verlauf");
@@ -109,6 +120,15 @@ abstract class ReiterDepots extends Basis {
                     y[k] = p == null ? 0 : p.optDouble(1, 0);
                 }
                 Verlaufsgraph g = new Verlaufsgraph(this, t, y, d.optDouble("Startkapital", y[0]));
+                JSONArray mk = d.optJSONArray("Marken");
+                if (mk != null && mk.length() > 0) {
+                    double[][] m = new double[mk.length()][];
+                    for (int k = 0; k < mk.length(); k++) {
+                        JSONArray e = mk.optJSONArray(k);
+                        m[k] = e == null ? null : new double[] { e.optDouble(0, 0), e.optDouble(1, 0), e.optDouble(2, 0) };
+                    }
+                    g.setzeMarken(m);
+                }
                 LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(150));
                 lp.setMargins(0, dp(8), 0, dp(4));
                 karte.addView(g, lp);

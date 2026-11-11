@@ -97,6 +97,17 @@ abstract class ReiterMarkt extends ReiterAnalyse {
             String links = empf.length() > 0 ? (p.isNull("Punkte") ? "" : p.optInt("Punkte", 50) + "  ") + empf : "";
             int fe = empf.equals("kaufen") ? GRUEN : empf.equals("verkaufen") ? ROT : GELB;
             karte.addView(zweispaltig(links, Double.isNaN(ae) ? "" : prozent(ae) + " heute", fe, Double.isNaN(ae) ? GRAU : ae >= 0 ? GRUEN : ROT));
+            // Alter des Kurses am PC: ● grün frisch, gelb gebremst, rot > 5 Min., grau Börse zu – antippen zeigt den Grund
+            String alter = s(p, "Alter");
+            if (alter.length() > 0) {
+                int st = p.optInt("AlterStufe", -1);
+                int fa = st == 0 ? GRUEN : st == 1 ? GELB : st == 2 ? ROT : GRAU;
+                TextView ta = text("● " + alter + "  ⓘ", 11, fa, false);
+                final String grund = s(p, "AlterGrund");
+                final String titel = s(p, "Name");
+                ta.setOnClickListener(v -> new AlertDialog.Builder(this).setTitle(titel).setMessage(grund).setPositiveButton("OK", null).show());
+                karte.addView(ta);
+            }
             View linie = new View(this);
             linie.setBackgroundColor(KARTE_HELL);
             LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, dp(1));
