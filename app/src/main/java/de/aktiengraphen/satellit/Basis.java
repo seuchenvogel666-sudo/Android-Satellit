@@ -92,6 +92,7 @@ abstract class Basis extends Activity {
     final Set<String> zugeklappt = new HashSet<>();
 
     // ---------- in MainActivity umgesetzt (hier nur angekündigt, damit die Reiter sie nutzen können) ----------
+    abstract void laden();
     abstract void anzeigen();
     abstract void notausBereich();
     abstract void meldungenBereich();
