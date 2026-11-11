@@ -883,6 +883,18 @@ public class MainActivity extends Activity {
         k.addView(text("Yahoo, letzte 60 Min.: " + std + " Abfragen (" + Math.round(100.0 * std / rw) + " % vom Richtwert ≈ " + rw + "/Std.*)", 12, TEXT, false));
         double gp = a.optDouble("YahooGeplant", 0);
         k.addView(text("Eingestellt bei Yahoo: " + (gp < 0.5 ? "–" : "≈ " + zahl0(gp) + "/Std."), 12, GRAU, false));
+        if (a.optBoolean("Auto", false)) {
+            String at = "Automatik AN · Ziel „" + s(a, "Ziel") + "“ · Tempo " + a.optInt("Tempo", 100) + " % → ≈ " + a.optInt("ZielJetzt", 0) + "/Std.";
+            int gr = a.optInt("Grenze", 0);
+            if (gr > 0) at += " · Obergrenze ≈ " + gr + "/Std.";
+            k.addView(text(at, 12, BLAU, true));
+            JSONArray v = a.optJSONArray("Verlauf");
+            if (v != null) for (int i = 0; i < v.length() && i < 3; i++) {
+                TextView tv = text(v.optString(i, ""), 11, GRAU, false);
+                tv.setPadding(dp(12), 0, 0, 0);
+                k.addView(tv);
+            }
+        } else k.addView(text("Automatik aus – feste Grenzen (am PC einschaltbar: Einstellungen › Datenabfragen).", 11, GRAU, false));
         String pause = s(a, "Pause");
         if (pause.length() > 0) k.addView(text("⏸ Yahoo sperrt gerade (zu viele Abfragen) – Pause bis " + pause + " Uhr.", 12, ROT, true));
         abfragenListe(k, a.optJSONArray("Quellen"), "Nach Datenquelle", true);
