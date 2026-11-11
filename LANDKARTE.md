@@ -1,6 +1,6 @@
 # LANDKARTE – Aktien-Satellit (Handy-App zu Aktien-Graphen)
 
-Ausführliche Regeln und Arbeitsweise: LANDKARTE.md im PC-Projekt Aktien-Graphen.
+Ausführliche Regeln und Arbeitsweise: LANDKARTE.md im privaten PC-Repository seuchenvogel666-sudo/AGraph2.
 
 - `app/src/main/java/de/aktiengraphen/satellit/`
   - `MainActivity` – Start, Koppeln (QR), Laden, Kopfzeile, Reiterleiste, Notaus, Meldungen, Einstellungen
