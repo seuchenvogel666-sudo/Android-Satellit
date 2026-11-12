@@ -89,6 +89,9 @@ abstract class ReiterAnalyse extends ReiterDepots {
                 k.addView(zweispaltig("Rendite" + (sch ? " ≈" : ""), pz(rd) + (Double.isNaN(erg) ? "" : "  (" + (erg >= 0 ? "+" : "−") + geld(Math.abs(erg), w) + ")"), GRAU, sch ? GELB : farbe(rd)));
                 if (sch) k.addView(zweispaltig("Spanne (wahrscheinlich)", pz(e.optDouble("SpanneVon", Double.NaN)) + " bis " + pz(e.optDouble("SpanneBis", Double.NaN)), GRAU, GELB));
                 else if (!e.isNull("Vergleich")) k.addView(zweispaltig("Vergleich " + s(e, "VergleichName"), pz(e.optDouble("Vergleich", Double.NaN)), GRAU, farbe(e.optDouble("Vergleich", Double.NaN))));
+                double msc = e.optDouble("Msci", Double.NaN);
+                if (!Double.isNaN(msc) && (sch || !"MSCI World".equals(s(e, "VergleichName"))))
+                    k.addView(zweispaltig(sch ? "MSCI World (bisher)" : "MSCI World", pz(msc), GRAU, farbe(msc)));
                 k.addView(zweispaltig("Größter Rückgang · Käufe/Verkäufe", "−" + zahl1(e.optDouble("MaxRueckgang", 0)) + " % · " + zahl0(e.optDouble("Kaeufe", 0)) + "/" + zahl0(e.optDouble("Verkaeufe", 0)), GRAU, TEXT));
                 double tq = e.optDouble("Trefferquote", Double.NaN);
                 k.addView(zweispaltig("Trefferquote · Gebühren · Steuer", (Double.isNaN(tq) ? "–" : zahl0(tq) + " %") + " · " + geld(e.optDouble("Gebuehren", 0), w) + " · " + geld(e.optDouble("Steuer", 0), w), GRAU, TEXT));

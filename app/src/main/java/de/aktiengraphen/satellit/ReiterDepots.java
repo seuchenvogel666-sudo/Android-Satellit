@@ -78,6 +78,8 @@ abstract class ReiterDepots extends Basis {
             karte.addView(text(geld(d.optDouble("Wert", 0), w), 26, TEXT, true));
             double gv = d.optDouble("Gv", 0), gvp = d.optDouble("GvProzent", 0);
             karte.addView(text((gv >= 0 ? "+" : "−") + geld(Math.abs(gv), w) + "  (" + prozent(gvp) + ") seit Start", 14, gv >= 0 ? GRUEN : ROT, false));
+            double ms = d.optDouble("MsciSeitStart", Double.NaN);
+            if (!Double.isNaN(ms)) karte.addView(text("Vergleich MSCI World seit Start: " + prozent(ms), 12, GRAU, false));
             karte.addView(text(s(d, "Laufzeit"), 12, GRAU, false));
             if (d.optBoolean("Real", false))
                 karte.addView(text("Echtgeld-Probelauf · " + s(d, "Broker") + " · Orders werden nur protokolliert", 12, GELB, false));
