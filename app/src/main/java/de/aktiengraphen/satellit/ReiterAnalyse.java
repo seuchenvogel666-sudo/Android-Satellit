@@ -48,30 +48,36 @@ abstract class ReiterAnalyse extends ReiterDepots {
         JSONObject a = daten.optJSONObject("Auswertung");
         if (a == null) { inhalt.addView(hinweis("Der PC liefert noch keine Auswertung – bitte Aktien-Graphen am PC aktualisieren.", GELB)); return; }
         JSONArray r = a.optJSONArray("Rangliste");
-        if (r != null && r.length() > 0) {
-            LinearLayout k = karte();
-            k.addView(text("Rangliste", 16, TEXT, true));
-            for (int i = 0; i < r.length(); i++) {
-                JSONObject p = r.optJSONObject(i);
-                if (p == null) continue;
-                double rd = p.optDouble("Rendite", Double.NaN);
-                k.addView(zweispaltig(p.optInt("Platz", i + 1) + ". " + (p.optBoolean("Real", false) ? "[Real] " : "") + s(p, "Name"), pz(rd), TEXT, farbe(rd)));
-                double pj = p.optDouble("ProJahr", Double.NaN), tq = p.optDouble("Trefferquote", Double.NaN);
-                TextView z = text("läuft " + s(p, "Laufzeit") + (Double.isNaN(pj) ? "" : " · aufs Jahr " + pz(pj)) + " · Rückgang −" + zahl1(p.optDouble("MaxRueckgang", 0)) + " %" +
-                        " · " + p.optInt("Trades", 0) + " Trades" + (Double.isNaN(tq) ? "" : " · Treffer " + zahl0(tq) + " %"), 12, GRAU, false);
-                z.setPadding(0, 0, 0, dp(6));
-                k.addView(z);
-            }
-            inhalt.addView(k);
-        }
         JSONArray l = a.optJSONArray("Depots");
         if (l == null || l.length() == 0) { inhalt.addView(hinweis("Noch keine Depots – Berichte erscheinen, sobald am PC ein Depot läuft.", GRAU)); return; }
+        // Depots nach hochgerechneter Rendite (aufs Jahr gerechnet) sortieren, beste zuerst; Werte der früheren Rangliste in jede Karte
+        java.util.List<JSONObject> ds = new java.util.ArrayList<>();
+        final java.util.Map<JSONObject, JSONObject> rang = new java.util.HashMap<>();
         for (int i = 0; i < l.length(); i++) {
             JSONObject d = l.optJSONObject(i);
             if (d == null) continue;
+            ds.add(d);
+            if (r != null) for (int j = 0; j < r.length(); j++) {
+                JSONObject p = r.optJSONObject(j);
+                if (p != null && s(p, "Name").equals(s(d, "Name")) && p.optBoolean("Real", false) == d.optBoolean("Real", false)) { rang.put(d, p); break; }
+            }
+        }
+        java.util.Collections.sort(ds, (x, y) -> Double.compare(schluessel(rang.get(y)), schluessel(rang.get(x))));
+        int platz = 0;
+        for (JSONObject d : ds) {
+            platz++;
             String w = waehrung(d.optString("Waehrung", "EUR"));
             LinearLayout k = karte();
-            k.addView(text((d.optBoolean("Real", false) ? "Realdepot · " : "") + s(d, "Name"), 16, TEXT, true));
+            k.addView(text((ds.size() > 1 ? platz + ". " : "") + (d.optBoolean("Real", false) ? "Realdepot · " : "") + s(d, "Name"), 16, TEXT, true));
+            JSONObject p = rang.get(d);
+            if (p != null) {
+                double rd = p.optDouble("Rendite", Double.NaN), pj = p.optDouble("ProJahr", Double.NaN), tq = p.optDouble("Trefferquote", Double.NaN);
+                k.addView(zweispaltig("Aufs Jahr hochgerechnet", Double.isNaN(pj) ? "zu früh (< 7 Tage)" : "≈ " + pz(pj), GRAU, Double.isNaN(pj) ? GRAU : farbe(pj)));
+                k.addView(zweispaltig("Seit Start (läuft " + s(p, "Laufzeit") + ")", pz(rd), GRAU, farbe(rd)));
+                k.addView(zweispaltig("Rückgang · Trades · Treffer", "−" + zahl1(p.optDouble("MaxRueckgang", 0)) + " % · " + p.optInt("Trades", 0) + " · " + (Double.isNaN(tq) ? "–" : zahl0(tq) + " %"), GRAU, TEXT));
+                double ge = p.optDouble("Gesichert", 0);
+                k.addView(zweispaltig("Kosten" + (ge > 0.004 ? " · Gesichert" : "") + " seit Start", geld(p.optDouble("Kosten", 0), w) + (ge > 0.004 ? " · " + geld(ge, w) : ""), GRAU, TEXT));
+            }
             JSONArray b = d.optJSONArray("Berichte");
             if (b != null) for (int j = 0; j < b.length(); j++) {
                 JSONObject e = b.optJSONObject(j);
@@ -90,6 +96,14 @@ abstract class ReiterAnalyse extends ReiterDepots {
             }
             inhalt.addView(k);
         }
+    }
+
+    // Sortierschlüssel: aufs Jahr hochgerechnete Rendite; ohne Hochrechnung (< 7 Tage) ans Ende, dort nach Rendite seit Start
+    static double schluessel(JSONObject p) {
+        if (p == null) return -2e9;
+        double pj = p.optDouble("ProJahr", Double.NaN), rd = p.optDouble("Rendite", Double.NaN);
+        if (!Double.isNaN(pj)) return pj;
+        return -1e9 + (Double.isNaN(rd) ? 0 : rd);
     }
 
     // ---------- Reiter Backtest: letztes Ergebnis vom PC (gestartet wird nur am PC) ----------
