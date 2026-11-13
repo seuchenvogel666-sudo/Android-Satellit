@@ -11,4 +11,4 @@ Ausführliche Regeln und Arbeitsweise: LANDKARTE.md im privaten PC-Repository se
   - `Verbindung` (HMAC, Port 47811), `Heimnetz`, `Waechter` (WorkManager, alle 15 Min.), `Hinweise` (Benachrichtigungen), `Verlaufsgraph`
 - Vererbung: MainActivity → ReiterMarkt → ReiterAnalyse → ReiterDepots → Basis → Activity.
   Methoden, die ein Reiter aus MainActivity braucht, in `Basis` als `abstract` ankündigen.
-- Version in `app/build.gradle` erhöhen. Push baut die APK (GitHub Actions) und legt sie in die Release `satellit-latest`.
+- Version in `app/build.gradle` erhöhen: `versionName` seit 13.11.2026 neu ab 1.0 (danach 1.01, 1.02 …), `versionCode` immer weiter +1 (nie zurücksetzen). Push baut die APK (GitHub Actions) und legt sie in die Release `satellit-latest`.
