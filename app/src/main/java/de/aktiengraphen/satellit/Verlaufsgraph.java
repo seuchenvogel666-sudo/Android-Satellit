@@ -94,6 +94,11 @@ public class Verlaufsgraph extends View {
                 float d0 = kauf ? yy + s * 0.6f : yy - s * 0.6f, d1 = kauf ? d0 + s * 1.6f : d0 - s * 1.6f;
                 Path tr = new Path();
                 tr.moveTo(x, d0); tr.lineTo(x - s, d1); tr.lineTo(x + s, d1); tr.close();
+                // senkrechte Linie über die ganze Höhe (halb durchsichtig): Zeitpunkt des Kaufs/Verkaufs gut erkennbar
+                marke.setStyle(Paint.Style.STROKE);
+                marke.setStrokeWidth(px(1));
+                marke.setColor(kauf ? Color.argb(120, 61, 220, 132) : Color.argb(120, 255, 92, 92));
+                c.drawLine(x, oben, x, unten, marke);
                 marke.setColor(kauf ? Color.rgb(61, 220, 132) : Color.rgb(255, 92, 92));
                 marke.setStyle(m[2] > 0.5 ? Paint.Style.STROKE : Paint.Style.FILL);
                 marke.setStrokeWidth(px(1.4f));
