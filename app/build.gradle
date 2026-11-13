@@ -10,8 +10,8 @@ android {
         applicationId 'de.aktiengraphen.satellit'
         minSdk 24
         targetSdk 34
-        versionCode 23
-        versionName '1.01'
+        versionCode 24
+        versionName '1.03'
     }
 
     // Signierschlüssel kommt NUR aus den GitHub-Secrets (SATELLIT_KEYSTORE, SATELLIT_PASSWORT) –

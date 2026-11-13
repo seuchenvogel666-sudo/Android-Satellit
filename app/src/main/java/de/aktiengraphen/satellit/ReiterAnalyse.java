@@ -111,6 +111,26 @@ abstract class ReiterAnalyse extends ReiterDepots {
 
     // ---------- Reiter Backtest: letztes Ergebnis vom PC (gestartet wird nur am PC) ----------
     void backtest() {
+        // 1.03: Stand der Langzeittests (nur Anzeige – gestartet und beendet wird am PC)
+        JSONArray lz = daten.optJSONArray("Langzeittests");
+        if (lz != null && lz.length() > 0) {
+            LinearLayout k = karte();
+            k.addView(text("Langzeittests", 16, TEXT, true));
+            for (int i = 0; i < lz.length(); i++) {
+                JSONObject t = lz.optJSONObject(i);
+                if (t == null) continue;
+                k.addView(text(s(t, "Name") + (t.optBoolean("Aktiv", true) ? "" : " (beendet)"), 14, TEXT, true));
+                int e = t.optInt("Erreicht", 0), n = Math.max(1, t.optInt("Punkte", 1));
+                StringBuilder bal = new StringBuilder();
+                for (int j = 0; j < n; j++) bal.append(j < e ? "■" : "□");
+                k.addView(text("Prüfpunkte " + e + "/" + n + "  " + bal, 12, BLAU, false));
+                double rd = t.isNull("Rendite") ? Double.NaN : t.optDouble("Rendite", Double.NaN), ms = t.isNull("Msci") ? Double.NaN : t.optDouble("Msci", Double.NaN);
+                if (!Double.isNaN(rd)) k.addView(zweispaltig("bei " + s(t, "Letzter") + ": " + pz(rd), "MSCI " + pz(ms), farbe(rd), GRAU));
+                k.addView(text(s(t, "Stand"), 11, GRAU, false));
+                if (s(t, "Vorlauf").length() > 0) k.addView(text(s(t, "Vorlauf"), 11, GRAU, false));
+            }
+            inhalt.addView(k);
+        }
         JSONObject b = daten.optJSONObject("Backtest");
         if (b == null) { inhalt.addView(hinweis("Der PC liefert noch keine Backtest-Daten – bitte Aktien-Graphen am PC aktualisieren.", GELB)); return; }
         String status = s(b, "Status");
