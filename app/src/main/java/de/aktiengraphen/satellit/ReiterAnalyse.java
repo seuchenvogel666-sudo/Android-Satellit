@@ -109,17 +109,30 @@ abstract class ReiterAnalyse extends ReiterDepots {
         return -1e9 + (Double.isNaN(rd) ? 0 : rd);
     }
 
+    static double jetzt(JSONObject t) {
+        return t == null || t.isNull("Jetzt") ? -1e9 : t.optDouble("Jetzt", -1e9);
+    }
+
     // ---------- Reiter Backtest: letztes Ergebnis vom PC (gestartet wird nur am PC) ----------
     void backtest() {
         // 1.03: Stand der Langzeittests (nur Anzeige – gestartet und beendet wird am PC)
         JSONArray lz = daten.optJSONArray("Langzeittests");
         if (lz != null && lz.length() > 0) {
             LinearLayout k = karte();
-            k.addView(text("Langzeittests", 16, TEXT, true));
-            for (int i = 0; i < lz.length(); i++) {
-                JSONObject t = lz.optJSONObject(i);
-                if (t == null) continue;
-                k.addView(text(s(t, "Name") + (t.optBoolean("Aktiv", true) ? "" : " (beendet)"), 14, TEXT, true));
+            k.addView(text(lz.length() > 1 ? "Langzeittests im Vergleich (" + lz.length() + ")" : "Langzeittests", 16, TEXT, true));
+            // 1.04 (PC 1.06, Punkt 42): mehrere Tests nach aktueller Rendite sortiert, mit Rang und Vorsprung gegen den MSCI World
+            java.util.List<JSONObject> tests = new java.util.ArrayList<>();
+            for (int i = 0; i < lz.length(); i++) if (lz.optJSONObject(i) != null) tests.add(lz.optJSONObject(i));
+            java.util.Collections.sort(tests, (x1, x2) -> Double.compare(jetzt(x2), jetzt(x1)));
+            for (int i = 0; i < tests.size(); i++) {
+                JSONObject t = tests.get(i);
+                double jz = t.isNull("Jetzt") ? Double.NaN : t.optDouble("Jetzt", Double.NaN), mj = t.isNull("MsciJetzt") ? Double.NaN : t.optDouble("MsciJetzt", Double.NaN);
+                k.addView(text((tests.size() > 1 && !Double.isNaN(jz) ? "#" + (i + 1) + "  " : "") + s(t, "Name") + (t.optBoolean("Aktiv", true) ? "" : " (beendet)"), 14, i == 0 && tests.size() > 1 ? GELB : TEXT, true));
+                if (!Double.isNaN(jz)) {
+                    double vs = Double.isNaN(mj) ? Double.NaN : jz - mj;
+                    k.addView(zweispaltig("jetzt " + pz(jz), Double.isNaN(vs) ? "MSCI –" : "Vorsprung " + (vs >= 0 ? "+" : "−") + String.format(java.util.Locale.GERMANY, "%.1f", Math.abs(vs)) + " Pkt.", farbe(jz), Double.isNaN(vs) ? GRAU : farbe(vs)));
+                    k.addView(text(t.optInt("Trades", 0) + " Trades · " + t.optInt("Positionen", 0) + " Positionen", 11, GRAU, false));
+                }
                 int e = t.optInt("Erreicht", 0), n = Math.max(1, t.optInt("Punkte", 1));
                 StringBuilder bal = new StringBuilder();
                 for (int j = 0; j < n; j++) bal.append(j < e ? "■" : "□");
