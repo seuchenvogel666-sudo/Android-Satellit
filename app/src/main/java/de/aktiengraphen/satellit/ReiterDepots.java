@@ -71,10 +71,12 @@ abstract class ReiterDepots extends Basis {
             zeile.addView(tn, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
             JSONObject na0 = daten.optJSONObject("Notaus");
             boolean notaus = na0 != null && na0.optBoolean("Aktiv", false);
-            TextView aktiv = chip(notaus ? "NOTAUS" : d.optBoolean("Gebremst", false) && d.optBoolean("Aktiv", true) ? "gebremst" : d.optBoolean("Aktiv", true) ? "aktiv" : "pausiert",
-                    notaus || (d.optBoolean("Gebremst", false) && d.optBoolean("Aktiv", true)) ? ROT : d.optBoolean("Aktiv", true) ? GRUEN : GELB);
+            boolean archiv = daten.optBoolean("ArchivAufbau", false);   // PC legt das Kursarchiv an: Depots pausieren so lange
+            TextView aktiv = chip(notaus ? "NOTAUS" : d.optBoolean("Gebremst", false) && d.optBoolean("Aktiv", true) ? "gebremst" : d.optBoolean("Aktiv", true) ? (archiv ? "Archiv" : "aktiv") : "pausiert",
+                    notaus || (d.optBoolean("Gebremst", false) && d.optBoolean("Aktiv", true)) ? ROT : d.optBoolean("Aktiv", true) && !archiv ? GRUEN : GELB);
             zeile.addView(aktiv);
             karte.addView(zeile);
+            if (archiv) karte.addView(text("Pausiert: " + daten.optString("ArchivText", "Kursarchiv wird angelegt"), 12, GELB, false));
             karte.addView(text(geld(d.optDouble("Wert", 0), w), 26, TEXT, true));
             double gv = d.optDouble("Gv", 0), gvp = d.optDouble("GvProzent", 0);
             karte.addView(text((gv >= 0 ? "+" : "−") + geld(Math.abs(gv), w) + "  (" + prozent(gvp) + ") seit Start", 14, gv >= 0 ? GRUEN : ROT, false));
