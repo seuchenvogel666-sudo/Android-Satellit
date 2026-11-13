@@ -103,6 +103,13 @@ abstract class ReiterMarkt extends ReiterAnalyse {
             String links = empf.length() > 0 ? (p.isNull("Punkte") ? "" : p.optInt("Punkte", 50) + "  ") + empf : "";
             int fe = empf.equals("kaufen") ? GRUEN : empf.equals("verkaufen") ? ROT : GELB;
             karte.addView(zweispaltig(links, Double.isNaN(ae) ? "" : prozent(ae) + " heute", fe, Double.isNaN(ae) ? GRAU : ae >= 0 ? GRUEN : ROT));
+            // 1.01: Trendwende-Punkt (grün = Wende nach oben, rot = nach unten) und Signale (WaveTrend, ADX, Orderbuch)
+            int wende = p.optInt("Wende", 0);
+            String sig = s(p, "Signale");
+            if (wende != 0 || sig.length() > 0)
+                karte.addView(text((wende > 0 ? "● Wende nach oben  " : wende < 0 ? "● Wende nach unten  " : "") + sig, 11, wende > 0 ? GRUEN : wende < 0 ? ROT : GRAU, false));
+            String korr = s(p, "Korrektur");
+            if (korr.length() > 0) karte.addView(text(korr, 11, GELB, false));
             // Alter des Kurses am PC: ● grün frisch, gelb gebremst, rot > 5 Min., grau Börse zu – antippen zeigt den Grund
             String alter = s(p, "Alter");
             if (alter.length() > 0) {
