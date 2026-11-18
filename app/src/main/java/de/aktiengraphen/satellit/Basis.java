@@ -45,16 +45,29 @@ abstract class Basis extends Activity {
 
     static final long NEU_LADEN_MS = 60000;
 
-    // Farben (Nachtblau, wie am PC)
-    static final int HINTERGRUND = Color.rgb(8, 14, 34);
-    static final int KARTE = Color.rgb(17, 31, 66);
-    static final int KARTE_HELL = Color.rgb(28, 46, 92);
-    static final int TEXT = Color.rgb(230, 236, 248);
-    static final int GRAU = Color.rgb(140, 156, 190);
-    static final int BLAU = Color.rgb(77, 163, 255);
-    static final int GRUEN = Color.rgb(61, 220, 132);
-    static final int ROT = Color.rgb(255, 92, 92);
-    static final int GELB = Color.rgb(255, 200, 70);
+    // Farben: Vorgabe Nachtblau; sobald der PC verbunden ist, gelten seine Farben (Schwarz / Blau / Grau, siehe farbenAnwenden)
+    static int HINTERGRUND = Color.rgb(8, 14, 34);
+    static int KARTE = Color.rgb(17, 31, 66);
+    static int KARTE_HELL = Color.rgb(28, 46, 92);
+    static int TEXT = Color.rgb(230, 236, 248);
+    static int GRAU = Color.rgb(140, 156, 190);
+    static int BLAU = Color.rgb(77, 163, 255);
+    static int GRUEN = Color.rgb(61, 220, 132);
+    static int ROT = Color.rgb(255, 92, 92);
+    static int GELB = Color.rgb(255, 200, 70);
+    static int TIEF = Color.rgb(10, 20, 46);
+
+    static int hexFarbe(JSONObject f, String k, int std) {
+        try { return Color.parseColor(f.optString(k, "")); } catch (Exception e) { return std; }
+    }
+
+    /** Farben des PCs übernehmen (Paket-Feld "Farben"). */
+    static void farbenAnwenden(JSONObject f) {
+        if (f == null) return;
+        HINTERGRUND = hexFarbe(f, "Hintergrund", HINTERGRUND); KARTE = hexFarbe(f, "Karte", KARTE); KARTE_HELL = hexFarbe(f, "KarteHell", KARTE_HELL);
+        TEXT = hexFarbe(f, "Text", TEXT); GRAU = hexFarbe(f, "Grau", GRAU); BLAU = hexFarbe(f, "Blau", BLAU);
+        GRUEN = hexFarbe(f, "Gruen", GRUEN); ROT = hexFarbe(f, "Rot", ROT); GELB = hexFarbe(f, "Gelb", GELB); TIEF = hexFarbe(f, "Tief", TIEF);
+    }
 
     SharedPreferences prefs;
     final Handler handler = new Handler(Looper.getMainLooper());
@@ -93,6 +106,57 @@ abstract class Basis extends Activity {
 
     // ---------- in MainActivity umgesetzt (hier nur angekündigt, damit die Reiter sie nutzen können) ----------
     abstract void laden();
+    /** Befehl an den PC senden (Empfehlungen lokal neu berechnen / Backtest für ein Depot). */
+    abstract void befehl(String art, String ziel, String titel);
+
+    String befehlErgebnis;
+    int befehlFarbe = GRAU;
+    boolean befehlLaeuft;
+    Runnable bestaetigtOk;
+    static final int ANF_SPERRE = 4711;
+
+    int appCode() {
+        try { return getPackageManager().getPackageInfo(getPackageName(), 0).versionCode; } catch (Exception e) { return 0; }
+    }
+
+    /** Fingerabdruck/Gesicht abfragen (ersatzweise die Bildschirmsperre); führt ok nur nach erfolgreicher Bestätigung aus. */
+    void bestaetigen(final String grund, final Runnable ok) {
+        if (Build.VERSION.SDK_INT >= 28) {
+            try {
+                android.hardware.biometrics.BiometricPrompt.Builder b = new android.hardware.biometrics.BiometricPrompt.Builder(this)
+                        .setTitle("Bitte bestätigen").setSubtitle(grund);
+                b.setNegativeButton("Abbrechen", getMainExecutor(), new DialogInterface.OnClickListener() {
+                    @Override public void onClick(DialogInterface d, int w) { }
+                });
+                b.build().authenticate(new android.os.CancellationSignal(), getMainExecutor(), new android.hardware.biometrics.BiometricPrompt.AuthenticationCallback() {
+                    @Override public void onAuthenticationSucceeded(android.hardware.biometrics.BiometricPrompt.AuthenticationResult r) { ok.run(); }
+                    @Override public void onAuthenticationError(int code, CharSequence msg) {
+                        // 1 = Sensor nicht verfügbar, 11 = nichts eingerichtet, 12 = kein Sensor: dann die Bildschirmsperre als Ersatz
+                        if (code == 1 || code == 11 || code == 12) bestaetigenSperre(grund, ok);
+                    }
+                });
+                return;
+            } catch (Exception e) { /* weiter mit der Bildschirmsperre */ }
+        }
+        bestaetigenSperre(grund, ok);
+    }
+
+    void bestaetigenSperre(String grund, Runnable ok) {
+        android.app.KeyguardManager km = (android.app.KeyguardManager) getSystemService(KEYGUARD_SERVICE);
+        android.content.Intent i = km != null && km.isKeyguardSecure() ? km.createConfirmDeviceCredentialIntent("Bitte bestätigen", grund) : null;
+        if (i == null) {
+            android.widget.Toast.makeText(this, "Auf diesem Handy ist weder Fingerabdruck noch Bildschirmsperre eingerichtet – Bestätigung nicht möglich.", android.widget.Toast.LENGTH_LONG).show();
+            return;
+        }
+        bestaetigtOk = ok;
+        startActivityForResult(i, ANF_SPERRE);
+    }
+
+    @Override
+    protected void onActivityResult(int req, int res, android.content.Intent data) {
+        super.onActivityResult(req, res, data);
+        if (req == ANF_SPERRE && res == RESULT_OK && bestaetigtOk != null) { Runnable r = bestaetigtOk; bestaetigtOk = null; r.run(); }
+    }
     abstract void anzeigen();
     abstract void notausBereich();
     abstract void meldungenBereich();

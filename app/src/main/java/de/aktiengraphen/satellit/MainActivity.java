@@ -64,6 +64,7 @@ public class MainActivity extends ReiterMarkt {
         super.onCreate(savedInstanceState);
         prefs = getSharedPreferences("satellit", MODE_PRIVATE);
         reiter = Math.max(0, Math.min(REITER.length - 1, prefs.getInt("reiter7", 2)));
+        try { String fs = prefs.getString("farben", null); if (fs != null) farbenAnwenden(new JSONObject(fs)); } catch (Exception ignored) { }
         getWindow().setStatusBarColor(HINTERGRUND);
         getWindow().setNavigationBarColor(HINTERGRUND);
 
@@ -111,7 +112,8 @@ public class MainActivity extends ReiterMarkt {
         // Reiter wie am PC – in zwei Zeilen, damit nichts seitlich gescrollt werden muss
         LinearLayout reiterBlock = new LinearLayout(this);
         reiterBlock.setOrientation(LinearLayout.VERTICAL);
-        reiterBlock.setPadding(dp(12), dp(4), dp(12), dp(4));
+        reiterBlock.setPadding(dp(10), dp(8), dp(10), dp(8));
+        reiterBlock.setBackgroundColor(TIEF);   // wie die Navigation im Einstellungsfenster am PC, hier oben
         LinearLayout reiterLeiste = null;
         for (int i = 0; i < REITER.length; i++) {
             if (i == 0 || i == 4) {
@@ -121,11 +123,11 @@ public class MainActivity extends ReiterMarkt {
                 reiterBlock.addView(reiterLeiste);
             }
             final int nr = i;
-            TextView t = text(REITER[i], 12.5f, TEXT, true);
+            TextView t = text(REITER[i], 13f, TEXT, true);
             t.setGravity(Gravity.CENTER);
             t.setSingleLine(true);
             t.setEllipsize(android.text.TextUtils.TruncateAt.END);
-            t.setPadding(dp(2), dp(7), dp(2), dp(7));
+            t.setPadding(dp(2), dp(11), dp(2), dp(11));
             t.setOnClickListener(new View.OnClickListener() {
                 @Override public void onClick(View v) {
                     reiter = nr;
@@ -315,6 +317,19 @@ public class MainActivity extends ReiterMarkt {
                 handler.post(new Runnable() {
                     @Override public void run() {
                         laedt = false;
+                        if (ergebnis != null) {
+                            JSONObject fb = ergebnis.optJSONObject("Farben");
+                            if (fb != null) {
+                                String neuF = fb.toString();
+                                if (!neuF.equals(prefs.getString("farben", ""))) {
+                                    prefs.edit().putString("farben", neuF).apply();
+                                    farbenAnwenden(fb);
+                                    daten = ergebnis;
+                                    recreate();
+                                    return;
+                                }
+                            }
+                        }
                         if (ergebnis != null) daten = ergebnis;
                         fehler = fehlerText;
                         warten = wartenText;
@@ -351,7 +366,7 @@ public class MainActivity extends ReiterMarkt {
         for (int i = 0; i < REITER.length; i++) {
             GradientDrawable g = new GradientDrawable();
             g.setCornerRadius(dp(8));
-            g.setColor(i == reiter ? BLAU : KARTE);
+            g.setColor(i == reiter ? BLAU : KARTE_HELL);
             reiterKnoepfe[i].setBackground(g);
             reiterKnoepfe[i].setTextColor(i == reiter ? Color.WHITE : TEXT);
         }
@@ -360,16 +375,21 @@ public class MainActivity extends ReiterMarkt {
     void anzeigen() {
         aktualisiereKopf();
         inhalt.removeAllViews();
+        // Seitenkopf wie im Einstellungsfenster am PC: Titel und eine Zeile darunter
+        inhalt.addView(text(REITER[reiter], 20, TEXT, true));
+        TextView unter = text(REITER_UNTER[reiter], 12, GRAU, false);
+        unter.setPadding(0, dp(2), 0, dp(6));
+        inhalt.addView(unter);
         if (fehler != null) inhalt.addView(hinweis("⚠  Keine Verbindung zum PC\n" + fehler, ROT));
         if (warten != null && prefs.getString("kopplung", null) != null) inhalt.addView(hinweis("⏳ " + warten, GELB));
         if (prefs.getString("kopplung", null) == null) {
             inhalt.addView(hinweis("Willkommen! So koppelst du den Satelliten mit deinem PC:\n\n" +
                     "1. Das Handy ins selbe WLAN bringen, in dem dein PC steht.\n\n" +
-                    "2. Am PC in Aktien-Graphen unter Einstellungen › Synchronisation den Handy-Satelliten einschalten und „Kopplungs-Code zeigen“ klicken.\n\n" +
+                    "2. Am PC in Aktien-Graphen unter Einstellungen › Handy-Satellit den Handy-Satelliten einschalten und „Kopplungs-Code zeigen“ klicken.\n\n" +
                     "3. Hier oben „QR-Code scannen“ tippen und den Code vom PC-Bildschirm scannen.\n\n" +
                     "4. Am PC erscheint eine Abfrage – dort „Erlauben“ klicken.\n\n" +
                     "Danach holt die App die Daten jede Minute direkt vom PC – nur in deinem Heimnetz, verschlüsselt und ohne Cloud. " +
-                    "Am PC kann sie nur eines: per NOTAUS sofort jeden Handel stoppen. Freigeben geht nur am PC.", TEXT));
+                    "Am PC kann sie: per NOTAUS sofort jeden Handel stoppen, die Empfehlungen lokal neu berechnen lassen (ab 48 Std. Alter) und einen Backtest je Depot starten (höchstens alle 2 Std.) – sofern der PC das erlaubt. Freigeben geht nur am PC.", TEXT));
             return;
         }
         if (!imHeimnetz) {
@@ -385,6 +405,7 @@ public class MainActivity extends ReiterMarkt {
         long alter = System.currentTimeMillis() / 1000 - daten.optLong("StandUnix", 0);
         if (daten.optLong("StandUnix", 0) > 0 && alter > 600)
             inhalt.addView(hinweis("Der Stand vom PC ist " + (alter / 60) + " Minuten alt. Läuft Aktien-Graphen am PC noch, und stimmt die Uhrzeit?", GELB));
+        updateAngebot();
         switch (reiter) {
             case 0: positionen(); break;
             case 1: empfehlungen(); break;
@@ -396,7 +417,89 @@ public class MainActivity extends ReiterMarkt {
         }
     }
 
-    // ---------- NOTAUS: einziger Befehl ans PC-Programm ----------
+    static final String[] REITER_UNTER = {
+        "Deine Positionen mit Kurs und Empfehlung", "Die besten Empfehlungen je Kategorie", "Übungsdepots: Wert, Bestand und Trades", "Realdepots (Echtgeld-Probelauf)",
+        "Auswertung der Übungsdepots", "Backtest und Langzeittests – auch vom Handy startbar", "Zustand des PCs, Abfragen und Befehle" };
+
+    // Update der Handy-App: nur wenn der PC es anbietet; Installation erst nach Bestätigung per Fingerabdruck / Gesicht
+    void updateAngebot() {
+        final JSONObject up = daten == null ? null : daten.optJSONObject("Update");
+        if (up == null || !up.optBoolean("Angebot", false) || up.optInt("Code", 0) <= appCode()) return;
+        LinearLayout k = karte();
+        k.addView(text("Update verfügbar: Version " + s(up, "Name"), 16, TEXT, true));
+        k.addView(text("Dein PC bietet eine neue Version des Satelliten an (jetzt v" + appVersion() + "). Du musst die Installation mit Fingerabdruck oder Gesicht bestätigen.", 13, GRAU, false));
+        TextView b = knopf("Update installieren …");
+        b.setBackground(new android.graphics.drawable.GradientDrawable() {{ setCornerRadius(dp(8)); setColor(BLAU); }});
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(0, dp(8), 0, 0);
+        b.setLayoutParams(lp);
+        b.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                bestaetigen("Update der Aktien-Satellit-App installieren", new Runnable() {
+                    @Override public void run() {
+                        String link = s(up, "Link");
+                        if (link.length() == 0) return;
+                        try { startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(link))); } catch (Exception e) { }
+                    }
+                });
+            }
+        });
+        k.addView(b);
+        inhalt.addView(k);
+    }
+
+    // Befehl an den PC (Empfehlungen lokal neu berechnen / Backtest): erst bestätigen, dann senden; der PC entscheidet über Erlaubnis und Sperren
+    @Override
+    void befehl(final String art, final String ziel, final String titel) {
+        if (befehlLaeuft) return;
+        bestaetigen(titel, new Runnable() { @Override public void run() { befehlSenden(art, ziel); } });
+    }
+
+    void befehlSenden(final String art, final String ziel) {
+        final String code = prefs.getString("kopplung", null);
+        final Network netz = heimnetz();
+        final Verbindung.Kopplung k;
+        try { k = Verbindung.lesen(code); } catch (Verbindung.Fehler f) { befehlErgebnis = f.getMessage(); befehlFarbe = ROT; anzeigen(); return; }
+        java.util.List<String> passend = Heimnetz.passend(this, netz, k);
+        if (netz == null || passend.isEmpty()) {
+            befehlErgebnis = "Befehl NICHT gesendet: Das Handy ist nicht im Heimnetz des PCs.";
+            befehlFarbe = ROT;
+            anzeigen();
+            return;
+        }
+        k.adressen = passend;
+        befehlLaeuft = true;
+        befehlErgebnis = "Wird an den PC gesendet …";
+        befehlFarbe = GRAU;
+        anzeigen();
+        final String gid = geraetId(), gname = geraetName();
+        new Thread(new Runnable() {
+            @Override public void run() {
+                String erg; int farbe;
+                try {
+                    JSONObject a = new JSONObject(Verbindung.befehl(k, netz.getSocketFactory(), gid, gname, art, ziel));
+                    boolean ok = a.optBoolean("Ok", false);
+                    erg = (ok ? "✓ " : "✗ ") + s(a, "Text");
+                    farbe = ok ? GRUEN : GELB;
+                } catch (Exception e) {
+                    erg = "Befehl NICHT angekommen: " + e.getMessage();
+                    farbe = ROT;
+                }
+                final String e2 = erg; final int f2 = farbe;
+                handler.post(new Runnable() {
+                    @Override public void run() {
+                        befehlLaeuft = false;
+                        befehlErgebnis = e2;
+                        befehlFarbe = f2;
+                        laden();
+                        anzeigen();
+                    }
+                });
+            }
+        }).start();
+    }
+
+    // ---------- NOTAUS ----------
     String notausErgebnis;
     int notausFarbe = GRAU;
     boolean notausLaeuft;

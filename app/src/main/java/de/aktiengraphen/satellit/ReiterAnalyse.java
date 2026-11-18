@@ -114,7 +114,71 @@ abstract class ReiterAnalyse extends ReiterDepots {
     }
 
     // ---------- Reiter Backtest: letztes Ergebnis vom PC (gestartet wird nur am PC) ----------
+    // Befehle an den PC: Ergebnis der letzten Anfrage, Empfehlungen neu berechnen, Backtest je Depot (Sperren bestimmt der PC)
+    void befehlErgebnisZeigen() {
+        if (befehlErgebnis != null) inhalt.addView(hinweis(befehlErgebnis, befehlFarbe));
+    }
+
+    TextView befehlsKnopf(String s, boolean aktiv, View.OnClickListener l) {
+        TextView b = knopf(s);
+        android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
+        g.setCornerRadius(dp(8));
+        g.setColor(aktiv ? BLAU : KARTE_HELL);
+        b.setBackground(g);
+        b.setTextColor(aktiv ? Color.WHITE : GRAU);
+        b.setPadding(dp(10), dp(12), dp(10), dp(12));
+        if (aktiv) b.setOnClickListener(l);
+        return b;
+    }
+
+    void befehleEmpfehlungen() {
+        JSONObject be = daten.optJSONObject("Befehle");
+        if (be == null) return;
+        LinearLayout k = karte();
+        k.addView(text("Empfehlungen neu berechnen", 16, TEXT, true));
+        double alter = be.optDouble("EmpfAlterStd", 9999);
+        double grenze = be.optDouble("EmpfGrenzeStd", 48);
+        boolean erlaubt = be.optBoolean("Empf", false);
+        boolean reif = alter >= grenze;
+        k.addView(text("Die lokale Berechnung ist " + (alter >= 9000 ? "noch nie gelaufen" : String.format(java.util.Locale.GERMANY, "%.0f Std. alt", alter)) + ". Das Handy darf sie ab " + String.format(java.util.Locale.GERMANY, "%.0f", grenze) + " Std. neu anstoßen – ohne neue Abfragen an Quellen.", 13, GRAU, false));
+        if (!erlaubt) k.addView(text("Am PC ist das für Handys ausgeschaltet.", 13, GELB, false));
+        TextView b = befehlsKnopf(befehlLaeuft ? "Wird gesendet …" : "Jetzt lokal neu berechnen", erlaubt && reif && !befehlLaeuft, new View.OnClickListener() {
+            @Override public void onClick(View v) { befehl("empf", "", "Empfehlungen am PC lokal neu berechnen"); }
+        });
+        LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+        lp.setMargins(0, dp(8), 0, 0);
+        k.addView(b, lp);
+        inhalt.addView(k);
+    }
+
+    void befehleBacktest() {
+        JSONObject be = daten.optJSONObject("Befehle");
+        if (be == null) return;
+        LinearLayout k = karte();
+        k.addView(text("Backtest für ein Depot starten", 16, TEXT, true));
+        boolean erlaubt = be.optBoolean("Backtest", false);
+        k.addView(text("Mit den üblichen Einstellungen (3 Monate). Je Depot höchstens alle " + be.optInt("BacktestAbstandStd", 2) + " Std.; wer zu oft anfragt, wird " + be.optInt("SperreStd", 24) + " Std. gesperrt, damit der PC nicht belastet wird.", 13, GRAU, false));
+        if (!erlaubt) k.addView(text("Am PC ist das für Handys ausgeschaltet.", 13, GELB, false));
+        if (be.optBoolean("BacktestLaeuft", false)) k.addView(text("Am PC läuft gerade ein Backtest.", 13, GELB, false));
+        JSONArray ds = be.optJSONArray("Depots");
+        if (ds != null) for (int i = 0; i < ds.length(); i++) {
+            final JSONObject d = ds.optJSONObject(i);
+            if (d == null) continue;
+            boolean frei = d.optBoolean("Frei", false) && erlaubt && !befehlLaeuft && !be.optBoolean("BacktestLaeuft", false);
+            k.addView(zweispaltig(s(d, "Name"), s(d, "Status"), TEXT, d.optBoolean("Frei", false) ? GRUEN : GELB));
+            TextView b = befehlsKnopf("Backtest starten", frei, new View.OnClickListener() {
+                @Override public void onClick(View v) { befehl("backtest", s(d, "Id"), "Backtest für „" + s(d, "Name") + "“ am PC starten"); }
+            });
+            LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT);
+            lp.setMargins(0, dp(4), 0, dp(8));
+            k.addView(b, lp);
+        }
+        inhalt.addView(k);
+    }
+
     void backtest() {
+        befehlErgebnisZeigen();
+        befehleBacktest();
         // 1.03: Stand der Langzeittests (nur Anzeige – gestartet und beendet wird am PC)
         JSONArray lz = daten.optJSONArray("Langzeittests");
         if (lz != null && lz.length() > 0) {
@@ -242,6 +306,8 @@ abstract class ReiterAnalyse extends ReiterDepots {
     // ---------- Reiter System: Gesundheit, Notaus, Datensicherung ----------
     void system() {
         notausBereich();
+        befehlErgebnisZeigen();
+        befehleEmpfehlungen();
         JSONObject sy = daten.optJSONObject("System");
         if (sy == null) { inhalt.addView(hinweis("Der PC liefert noch keine System-Daten – bitte Aktien-Graphen am PC aktualisieren.", GELB)); return; }
         LinearLayout k = karte();

@@ -101,7 +101,7 @@ public final class Verbindung {
      * Gibt das JSON als Text zurück.
      */
     public static String abrufen(Kopplung k, SocketFactory fabrik, String geraetId, String geraetName) throws Fehler {
-        return senden(k, fabrik, geraetId, geraetName, false);
+        return senden(k, fabrik, geraetId, geraetName, false, null, null);
     }
 
     /**
@@ -109,15 +109,23 @@ public final class Verbindung {
      * Handel starten oder freigeben geht nur am PC. Gibt die (verschlüsselte, geprüfte) Bestätigung des PCs als JSON zurück.
      */
     public static String notaus(Kopplung k, SocketFactory fabrik, String geraetId, String geraetName) throws Fehler {
-        return senden(k, fabrik, geraetId, geraetName, true);
+        return senden(k, fabrik, geraetId, geraetName, true, null, null);
     }
 
-    private static String senden(Kopplung k, SocketFactory fabrik, String geraetId, String geraetName, boolean notaus) throws Fehler {
+    /**
+     * Befehl ans PC-Programm (ab 1.05): "empf" = Empfehlungen lokal neu berechnen, "backtest" = Backtest für ein Depot (ziel = Depot-Id).
+     * Der PC entscheidet (erlaubt? Sperre? Wartezeit?) und antwortet verschlüsselt mit {Ok, Text}.
+     */
+    public static String befehl(Kopplung k, SocketFactory fabrik, String geraetId, String geraetName, String art, String ziel) throws Fehler {
+        return senden(k, fabrik, geraetId, geraetName, false, art, ziel == null ? "" : ziel);
+    }
+
+    private static String senden(Kopplung k, SocketFactory fabrik, String geraetId, String geraetName, boolean notaus, String befehl, String bziel) throws Fehler {
         Fehler letzter = null;
         for (String ip : k.adressen) {
             if (!privateAdresse(ip) && !testOhneHeimnetz) continue;
             try {
-                return abrufenVon(ip, k, fabrik, geraetId, geraetName, notaus);
+                return abrufenVon(ip, k, fabrik, geraetId, geraetName, notaus, befehl, bziel);
             } catch (Fehler f) {
                 letzter = f;
                 if (f instanceof Abgelehnt) throw f;   // PC erreicht, aber Schlüssel/Zeit falsch – andere Adressen helfen nicht
@@ -135,7 +143,7 @@ public final class Verbindung {
         Warten(String s) { super(s); }
     }
 
-    private static String abrufenVon(String ip, Kopplung k, SocketFactory fabrik, String geraetId, String geraetName, boolean notaus) throws Fehler {
+    private static String abrufenVon(String ip, Kopplung k, SocketFactory fabrik, String geraetId, String geraetName, boolean notaus, String befehl, String bziel) throws Fehler {
         Socket s = null;
         try {
             InetAddress ziel = InetAddress.getByAddress(zahlen(ip));
@@ -148,8 +156,8 @@ public final class Verbindung {
             new SecureRandom().nextBytes(z);
             String nonce = hex(z);
             String t = String.valueOf(System.currentTimeMillis() / 1000);
-            String m = hex(hmac(abgeleitet(k.schluessel, "auth"), ((notaus ? "NOTAUS|" : "GET|") + t + "|" + nonce + "|" + geraetId + "|" + geraetName).getBytes("UTF-8")));
-            String anfrage = "GET " + (notaus ? "/notaus" : "/satellit") + "?t=" + t + "&n=" + nonce + "&g=" + geraetId + "&d=" + enc(geraetName) + "&m=" + m + " HTTP/1.1\r\n" +
+            String m = hex(hmac(abgeleitet(k.schluessel, "auth"), ((befehl != null ? "BEFEHL|" + befehl + "|" + bziel + "|" : notaus ? "NOTAUS|" : "GET|") + t + "|" + nonce + "|" + geraetId + "|" + geraetName).getBytes("UTF-8")));
+            String anfrage = "GET " + (befehl != null ? "/befehl" : notaus ? "/notaus" : "/satellit") + "?" + (befehl != null ? "c=" + enc(befehl) + "&x=" + enc(bziel) + "&" : "") + "t=" + t + "&n=" + nonce + "&g=" + geraetId + "&d=" + enc(geraetName) + "&m=" + m + " HTTP/1.1\r\n" +
                     "Host: " + ip + ":" + k.port + "\r\nConnection: close\r\n\r\n";
             OutputStream aus = s.getOutputStream();
             aus.write(anfrage.getBytes("US-ASCII"));
@@ -183,7 +191,7 @@ public final class Verbindung {
                 if (kopf.contains("X-Grund: update"))
                     throw new Abgelehnt("Bitte die App aktualisieren (neue Version über den QR-Code am PC laden).");
                 if (kopf.contains("X-Grund: zeit"))
-                    throw new Abgelehnt(notaus ? "Der PC hat den Notaus abgelehnt: Die Uhrzeit von Handy und PC weicht mehr als 2 Minuten ab."
+                    throw new Abgelehnt(notaus || befehl != null ? "Der PC hat den Befehl abgelehnt: Die Uhrzeit von Handy und PC weicht mehr als 2 Minuten ab."
                             : "Der PC hat abgelehnt: Die Uhrzeit von Handy und PC weicht mehr als 10 Minuten ab.");
                 throw new Abgelehnt("Der PC kennt dieses Handy nicht (mehr). Bitte am PC den Kopplungs-Code zeigen und hier neu scannen.");
             }
