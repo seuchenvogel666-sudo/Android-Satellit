@@ -73,7 +73,7 @@ abstract class Basis extends Activity {
     final Handler handler = new Handler(Looper.getMainLooper());
     LinearLayout inhalt;
     TextView kopfStatus, kopfPunkt;
-    static final String[] REITER = { "Positionen", "Empfehlungen", "Übungsdepot", "Realdepot", "Auswertung", "Backtest", "System" };
+    static final String[] REITER = { "Positionen", "Empfehlungen", "Übungsdepot", "Realdepot", "Auswertung", "Backtest", "System", "Bericht" };
     TextView[] reiterKnoepfe = new TextView[REITER.length];
     int reiter = 0;
     JSONObject daten;

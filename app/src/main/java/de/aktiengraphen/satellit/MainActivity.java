@@ -413,13 +413,14 @@ public class MainActivity extends ReiterMarkt {
             case 3: depots(true); break;
             case 4: auswertung(); break;
             case 5: backtest(); break;
-            default: system(); break;
+            case 6: system(); break;
+            default: bericht(); break;
         }
     }
 
     static final String[] REITER_UNTER = {
         "Deine Positionen mit Kurs und Empfehlung", "Die besten Empfehlungen je Kategorie", "Übungsdepots: Wert, Bestand und Trades", "Realdepots (Echtgeld-Probelauf)",
-        "Auswertung der Übungsdepots", "Backtest und Langzeittests – auch vom Handy startbar", "Zustand des PCs, Abfragen und Befehle" };
+        "Auswertung der Übungsdepots", "Backtest und Langzeittests – auch vom Handy startbar", "Zustand des PCs, Abfragen und Befehle", "Tagesberichte und Wochenteil vom PC" };
 
     // Update der Handy-App: nur wenn der PC es anbietet; Installation erst nach Bestätigung per Fingerabdruck / Gesicht
     void updateAngebot() {

@@ -303,6 +303,33 @@ abstract class ReiterAnalyse extends ReiterDepots {
         inhalt.addView(kp);
     }
 
+    // ---------- Reiter Bericht (ab 1.06): die letzten Tagesberichte vom PC, neuester oben ----------
+    void bericht() {
+        JSONArray b = daten.optJSONArray("Berichte");
+        if (b == null || b.length() == 0) {
+            inhalt.addView(hinweis("Noch kein Bericht vom PC. Der Tagesbericht entsteht täglich um 20:00 Uhr (Aktien-Graphen ab Version 2.13 muss am PC laufen).", GELB));
+            return;
+        }
+        for (int i = 0; i < b.length(); i++) {
+            JSONObject o = b.optJSONObject(i);
+            if (o == null) continue;
+            LinearLayout k = karte();
+            k.addView(text(s(o, "Datum"), 16, TEXT, true));
+            String t = s(o, "Text");
+            String[] zeilen = t.split("\n");
+            for (int j = 0; j < zeilen.length; j++) {
+                String z = zeilen[j].replace("\r", "");
+                if (z.trim().length() == 0 || z.startsWith("====")) continue;
+                boolean kopf = !z.startsWith(" ") && j > 1 && !z.startsWith("System:") && !z.startsWith("Tagesbericht");
+                boolean warn = z.contains("⚠") || z.startsWith("System: PROBLEM");
+                TextView tv = text(z.trim(), kopf ? 14 : 12, warn ? GELB : kopf ? TEXT : GRAU, kopf);
+                if (!kopf) tv.setPadding(dp(10), 0, 0, 0);
+                k.addView(tv);
+            }
+            inhalt.addView(k);
+        }
+    }
+
     // ---------- Reiter System: Gesundheit, Notaus, Datensicherung ----------
     void system() {
         notausBereich();
