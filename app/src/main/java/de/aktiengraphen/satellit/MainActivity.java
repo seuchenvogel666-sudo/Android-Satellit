@@ -167,9 +167,65 @@ public class MainActivity extends ReiterMarkt {
         }
     }
 
+    // ---------- Neue Version bei GitHub (ab 1.08): beim Öffnen der App und beim Entsperren, solange sie geöffnet ist ----------
+    static final String GITHUB_GRADLE = "https://raw.githubusercontent.com/seuchenvogel666-sudo/android-satellit/main/app/build.gradle";
+    static final String GITHUB_RELEASE = "https://github.com/seuchenvogel666-sudo/android-satellit/releases/tag/satellit-latest";
+    boolean githubLaeuft = false;
+
+    void githubPruefen() {
+        if (githubLaeuft) return;
+        long jetzt = System.currentTimeMillis();
+        if (jetzt - prefs.getLong("gh_pruef", 0) < 5 * 60 * 1000L) return;   // höchstens alle 5 Minuten
+        githubLaeuft = true;
+        prefs.edit().putLong("gh_pruef", jetzt).apply();
+        new Thread(new Runnable() {
+            @Override public void run() {
+                int code = 0; String name = "";
+                try {
+                    java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(GITHUB_GRADLE).openConnection();
+                    c.setConnectTimeout(6000); c.setReadTimeout(8000);
+                    java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(c.getInputStream(), "UTF-8"));
+                    StringBuilder sb = new StringBuilder(); String z;
+                    while ((z = r.readLine()) != null) sb.append(z).append('\n');
+                    r.close();
+                    java.util.regex.Matcher m1 = java.util.regex.Pattern.compile("versionCode\\s+(\\d+)").matcher(sb);
+                    java.util.regex.Matcher m2 = java.util.regex.Pattern.compile("versionName\\s+'([^']+)'").matcher(sb);
+                    if (m1.find()) code = Integer.parseInt(m1.group(1));
+                    if (m2.find()) name = m2.group(1);
+                } catch (Exception ignored) { }
+                githubLaeuft = false;
+                final int neuCode = code; final String neuName = name;
+                handler.post(new Runnable() { @Override public void run() { githubDialog(neuCode, neuName); } });
+            }
+        }).start();
+    }
+
+    void githubDialog(int neuCode, String neuName) {
+        if (isFinishing() || neuCode <= appCode()) return;
+        // „Später“ gilt 6 Stunden für genau diese Version
+        if (prefs.getInt("gh_spaeter_code", 0) == neuCode && System.currentTimeMillis() < prefs.getLong("gh_spaeter_bis", 0)) return;
+        appCodeNeu = neuCode;
+        new AlertDialog.Builder(this)
+            .setTitle("Neue Version verfügbar")
+            .setMessage("Aktien-Satellit v" + neuName + " ist bei GitHub verfügbar (installiert: v" + appVersion() + ").\n\nDie neue Version lädst du über die Download-Seite herunter und installierst sie dort. Alternativ bietet dein PC sie an (Einstellungen › Handy-Satellit) – dann bestätigst du mit Fingerabdruck.")
+            .setPositiveButton("Zur Download-Seite", new DialogInterface.OnClickListener() {
+                @Override public void onClick(DialogInterface d, int w) {
+                    try { startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(GITHUB_RELEASE))); } catch (Exception ignored) { }
+                }
+            })
+            .setNegativeButton("Später", new DialogInterface.OnClickListener() {
+                @Override public void onClick(DialogInterface d, int w) {
+                    prefs.edit().putInt("gh_spaeter_code", appCodeNeu).putLong("gh_spaeter_bis", System.currentTimeMillis() + 6 * 3600 * 1000L).apply();
+                }
+            })
+            .show();
+    }
+    int appCodeNeu = 0;
+
     @Override
     protected void onResume() {
         super.onResume();
+        githubPruefen();
         handler.removeCallbacks(automatisch);
         handler.post(automatisch);
     }
