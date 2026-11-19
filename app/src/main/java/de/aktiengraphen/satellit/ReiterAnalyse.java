@@ -44,7 +44,28 @@ import java.util.Set;
 abstract class ReiterAnalyse extends ReiterDepots {
 
     // ---------- Reiter Auswertung: Berichte je Zeitraum (mit Schätzung) und Rangliste ----------
+    // Kurze Top-5-Übersicht oben (ab 1.07), im Stil der Übersicht im Hauptprogramm
+    void uebersichtKarte() {
+        JSONArray u = daten.optJSONArray("Uebersicht");
+        if (u == null || u.length() < 2) return;
+        LinearLayout k = karte();
+        k.addView(text("Übersicht – die besten Depots", 16, TEXT, true));
+        for (int i = 0; i < u.length(); i++) {
+            JSONObject o = u.optJSONObject(i);
+            if (o == null) continue;
+            int farbe = o.optBoolean("Plus", true) ? GRUEN : ROT;
+            k.addView(text((i + 1) + ". " + s(o, "Name"), 14, TEXT, true));
+            k.addView(text(s(o, "Gewinn") + " (" + s(o, "Rendite") + ")  ·  Wert " + s(o, "Wert") + "  ·  Laufzeit " + s(o, "Laufzeit"), 13, farbe, false));
+            int ks = o.optInt("KostenStufe", 0);
+            TextView z = text("Treffer " + s(o, "Treffer") + "  ·  Kosten " + s(o, "Kosten") + "  ·  gesichert " + s(o, "Gesichert"), 12, ks == 2 ? ROT : ks == 1 ? GELB : GRAU, false);
+            z.setPadding(0, 0, 0, dp(6));
+            k.addView(z);
+        }
+        inhalt.addView(k);
+    }
+
     void auswertung() {
+        uebersichtKarte();
         JSONObject a = daten.optJSONObject("Auswertung");
         if (a == null) { inhalt.addView(hinweis("Der PC liefert noch keine Auswertung – bitte Aktien-Graphen am PC aktualisieren.", GELB)); return; }
         JSONArray r = a.optJSONArray("Rangliste");

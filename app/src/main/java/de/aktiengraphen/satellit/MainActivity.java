@@ -63,7 +63,8 @@ public class MainActivity extends ReiterMarkt {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         prefs = getSharedPreferences("satellit", MODE_PRIVATE);
-        reiter = Math.max(0, Math.min(REITER.length - 1, prefs.getInt("reiter7", 2)));
+        Verbindung.appVersion(getApplicationContext());
+        reiter =Math.max(0, Math.min(REITER.length - 1, prefs.getInt("reiter7", 2)));
         try { String fs = prefs.getString("farben", null); if (fs != null) farbenAnwenden(new JSONObject(fs)); } catch (Exception ignored) { }
         getWindow().setStatusBarColor(HINTERGRUND);
         getWindow().setNavigationBarColor(HINTERGRUND);

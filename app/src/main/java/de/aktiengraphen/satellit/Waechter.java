@@ -35,6 +35,7 @@ public class Waechter extends Worker {
     @NonNull @Override
     public Result doWork() {
         Context c = getApplicationContext();
+        Verbindung.appVersion(c);
         SharedPreferences p = Hinweise.prefs(c);
         String code = p.getString("kopplung", null), gid = p.getString("geraet", null);
         if (code == null || gid == null || !p.getBoolean("melden", true)) return Result.success();

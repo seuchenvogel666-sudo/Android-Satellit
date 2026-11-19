@@ -143,6 +143,16 @@ public final class Verbindung {
         Warten(String s) { super(s); }
     }
 
+    /** Version dieser App (ab 1.07): wird bei jedem Abruf mitgeschickt, damit der PC anzeigen kann, welche Version tatsächlich installiert ist. */
+    static volatile int appCode = 0;
+    static volatile String appName = "";
+    static void appVersion(android.content.Context c) {
+        try {
+            android.content.pm.PackageInfo pi = c.getPackageManager().getPackageInfo(c.getPackageName(), 0);
+            appCode = pi.versionCode; appName = pi.versionName == null ? "" : pi.versionName;
+        } catch (Exception ignored) { }
+    }
+
     private static String abrufenVon(String ip, Kopplung k, SocketFactory fabrik, String geraetId, String geraetName, boolean notaus, String befehl, String bziel) throws Fehler {
         Socket s = null;
         try {
@@ -157,7 +167,7 @@ public final class Verbindung {
             String nonce = hex(z);
             String t = String.valueOf(System.currentTimeMillis() / 1000);
             String m = hex(hmac(abgeleitet(k.schluessel, "auth"), ((befehl != null ? "BEFEHL|" + befehl + "|" + bziel + "|" : notaus ? "NOTAUS|" : "GET|") + t + "|" + nonce + "|" + geraetId + "|" + geraetName).getBytes("UTF-8")));
-            String anfrage = "GET " + (befehl != null ? "/befehl" : notaus ? "/notaus" : "/satellit") + "?" + (befehl != null ? "c=" + enc(befehl) + "&x=" + enc(bziel) + "&" : "") + "t=" + t + "&n=" + nonce + "&g=" + geraetId + "&d=" + enc(geraetName) + "&m=" + m + " HTTP/1.1\r\n" +
+            String anfrage = "GET " + (befehl != null ? "/befehl" : notaus ? "/notaus" : "/satellit") + "?" + (befehl != null ? "c=" + enc(befehl) + "&x=" + enc(bziel) + "&" : "") + "t=" + t + "&n=" + nonce + "&g=" + geraetId + "&d=" + enc(geraetName) + (appCode > 0 ? "&av=" + appCode + "&an=" + enc(appName) : "") + "&m=" + m + " HTTP/1.1\r\n" +
                     "Host: " + ip + ":" + k.port + "\r\nConnection: close\r\n\r\n";
             OutputStream aus = s.getOutputStream();
             aus.write(anfrage.getBytes("US-ASCII"));
