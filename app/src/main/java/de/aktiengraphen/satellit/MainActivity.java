@@ -237,32 +237,68 @@ public class MainActivity extends ReiterMarkt {
         new Thread(new Runnable() {
             @Override public void run() {
                 try {
-                    java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(GITHUB_APK).openConnection();
-                    c.setConnectTimeout(10000); c.setReadTimeout(20000); c.setInstanceFollowRedirects(true);
-                    int gesamt = c.getContentLength();
                     java.io.File f = new java.io.File(getCacheDir(), "update.apk");
-                    java.io.InputStream in = c.getInputStream();
-                    java.io.FileOutputStream out = new java.io.FileOutputStream(f);
-                    byte[] puf = new byte[32768]; int n; long summe = 0; int letzte = -1;
-                    while ((n = in.read(puf)) > 0) {
-                        out.write(puf, 0, n); summe += n;
-                        if (gesamt > 0) {
-                            final int proz = (int) (summe * 100 / gesamt);
-                            if (proz != letzte) { letzte = proz; handler.post(new Runnable() { @Override public void run() { if (ladeDialog != null) ladeDialog.setMessage("Lade herunter … " + proz + " %"); } }); }
-                        }
-                    }
-                    out.close(); in.close();
+                    herunterladen(f);
                     if (f.length() < 500000) throw new Exception("Die heruntergeladene Datei ist zu klein (" + f.length() + " Bytes)");
                     handler.post(new Runnable() { @Override public void run() { if (ladeDialog != null) ladeDialog.setMessage("Installation wird vorbereitet …"); } });
                     installSitzung(f);
                 } catch (final Exception e) {
                     handler.post(new Runnable() { @Override public void run() {
                         if (ladeDialog != null) ladeDialog.dismiss();
-                        new AlertDialog.Builder(MainActivity.this).setTitle("Update fehlgeschlagen").setMessage(String.valueOf(e.getMessage())).setPositiveButton("OK", null).show();
+                        new AlertDialog.Builder(MainActivity.this).setTitle("Update fehlgeschlagen").setMessage(String.valueOf(e.getMessage()) + "\n\nDu kannst es noch einmal versuchen oder die Datei im Browser laden.")
+                            .setPositiveButton("Noch einmal", new DialogInterface.OnClickListener() { @Override public void onClick(DialogInterface d, int w) { apkInstallieren(); } })
+                            .setNegativeButton("Im Browser", new DialogInterface.OnClickListener() { @Override public void onClick(DialogInterface d, int w) { try { startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(GITHUB_APK))); } catch (Exception ignored) { } } })
+                            .show();
                     } });
                 }
             }
         }).start();
+    }
+
+    // Download mit Wiederaufnahme: bricht die Verbindung mitten drin ab („Software caused connection abort“), geht es an der Stelle weiter (bis zu 8 Versuche)
+    void herunterladen(java.io.File f) throws Exception {
+        runOnUiThread(new Runnable() { @Override public void run() { getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); } });
+        try {
+            if (f.exists()) f.delete();
+            long gesamt = -1; int letzte = -1; Exception letzterFehler = null;
+            for (int versuch = 1; versuch <= 8; versuch++) {
+                long haben = f.exists() ? f.length() : 0;
+                if (gesamt > 0 && haben >= gesamt) return;
+                java.net.HttpURLConnection c = null;
+                try {
+                    c = (java.net.HttpURLConnection) new java.net.URL(GITHUB_APK).openConnection();
+                    c.setConnectTimeout(15000); c.setReadTimeout(30000); c.setInstanceFollowRedirects(true);
+                    c.setRequestProperty("Accept-Encoding", "identity");
+                    if (haben > 0) c.setRequestProperty("Range", "bytes=" + haben + "-");
+                    int code = c.getResponseCode();
+                    if (code != 200 && code != 206) throw new java.io.IOException("Server antwortet mit " + code);
+                    if (code == 200 && haben > 0) { f.delete(); haben = 0; }   // Server kennt keine Wiederaufnahme: von vorn
+                    long laenge = c.getContentLength();
+                    if (laenge > 0) gesamt = haben + laenge;
+                    java.io.InputStream in = c.getInputStream();
+                    java.io.FileOutputStream out = new java.io.FileOutputStream(f, haben > 0);
+                    byte[] puf = new byte[32768]; int n; long summe = haben;
+                    try {
+                        while ((n = in.read(puf)) > 0) {
+                            out.write(puf, 0, n); summe += n;
+                            if (gesamt > 0) {
+                                final int proz = (int) (summe * 100 / gesamt);
+                                if (proz != letzte) { letzte = proz; handler.post(new Runnable() { @Override public void run() { if (ladeDialog != null) ladeDialog.setMessage("Lade herunter … " + proz + " %"); } }); }
+                            }
+                        }
+                    } finally { out.close(); in.close(); }
+                    if (gesamt <= 0 || f.length() >= gesamt) return;
+                } catch (java.io.IOException e) {
+                    letzterFehler = e;
+                    final int v = versuch;
+                    handler.post(new Runnable() { @Override public void run() { if (ladeDialog != null) ladeDialog.setMessage("Verbindung unterbrochen – neuer Versuch " + (v + 1) + " von 8 …"); } });
+                    try { Thread.sleep(2000); } catch (InterruptedException ignored) { }
+                } finally { if (c != null) c.disconnect(); }
+            }
+            throw new Exception("Download nach 8 Versuchen nicht möglich: " + (letzterFehler == null ? "unvollständig" : letzterFehler.getMessage()));
+        } finally {
+            runOnUiThread(new Runnable() { @Override public void run() { getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); } });
+        }
     }
 
     void installSitzung(java.io.File f) throws Exception {
