@@ -207,11 +207,9 @@ public class MainActivity extends ReiterMarkt {
         appCodeNeu = neuCode;
         new AlertDialog.Builder(this)
             .setTitle("Neue Version verfügbar")
-            .setMessage("Aktien-Satellit v" + neuName + " ist bei GitHub verfügbar (installiert: v" + appVersion() + ").\n\nDie neue Version lädst du über die Download-Seite herunter und installierst sie dort. Alternativ bietet dein PC sie an (Einstellungen › Handy-Satellit) – dann bestätigst du mit Fingerabdruck.")
-            .setPositiveButton("Zur Download-Seite", new DialogInterface.OnClickListener() {
-                @Override public void onClick(DialogInterface d, int w) {
-                    try { startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(GITHUB_RELEASE))); } catch (Exception ignored) { }
-                }
+            .setMessage("Aktien-Satellit v" + neuName + " ist bei GitHub verfügbar (installiert: v" + appVersion() + ").\n\nDie App lädt die neue Version selbst herunter; zum Schluss fragt Android einmal, ob du sie installieren willst.")
+            .setPositiveButton("Jetzt installieren", new DialogInterface.OnClickListener() {
+                @Override public void onClick(DialogInterface d, int w) { apkInstallieren(); }
             })
             .setNegativeButton("Später", new DialogInterface.OnClickListener() {
                 @Override public void onClick(DialogInterface d, int w) {
@@ -221,6 +219,90 @@ public class MainActivity extends ReiterMarkt {
             .show();
     }
     int appCodeNeu = 0;
+
+    // ---------- Herunterladen und Installieren in der App (ab 1.10) ----------
+    static final String GITHUB_APK = "https://github.com/seuchenvogel666-sudo/android-satellit/releases/download/satellit-latest/aktien-satellit.apk";
+    static final String INSTALL_AKTION = "de.aktiengraphen.satellit.INSTALL";
+    boolean installEmpfaenger = false;
+    AlertDialog ladeDialog;
+
+    void apkInstallieren() {
+        // Android erlaubt Installationen aus einer App nur mit einmaliger Freigabe in den Systemeinstellungen
+        if (Build.VERSION.SDK_INT >= 26 && !getPackageManager().canRequestPackageInstalls()) {
+            android.widget.Toast.makeText(this, "Bitte „Aus dieser Quelle zulassen“ einschalten, dann zurück und noch einmal auf Installieren tippen.", android.widget.Toast.LENGTH_LONG).show();
+            try { startActivity(new android.content.Intent(android.provider.Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, android.net.Uri.parse("package:" + getPackageName()))); } catch (Exception ignored) { }
+            return;
+        }
+        installEmpfaengerAnmelden();
+        ladeDialog = new AlertDialog.Builder(this).setTitle("Update wird geladen").setMessage("Lade herunter … 0 %").setCancelable(false).show();
+        new Thread(new Runnable() {
+            @Override public void run() {
+                try {
+                    java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(GITHUB_APK).openConnection();
+                    c.setConnectTimeout(10000); c.setReadTimeout(20000); c.setInstanceFollowRedirects(true);
+                    int gesamt = c.getContentLength();
+                    java.io.File f = new java.io.File(getCacheDir(), "update.apk");
+                    java.io.InputStream in = c.getInputStream();
+                    java.io.FileOutputStream out = new java.io.FileOutputStream(f);
+                    byte[] puf = new byte[32768]; int n; long summe = 0; int letzte = -1;
+                    while ((n = in.read(puf)) > 0) {
+                        out.write(puf, 0, n); summe += n;
+                        if (gesamt > 0) {
+                            final int proz = (int) (summe * 100 / gesamt);
+                            if (proz != letzte) { letzte = proz; handler.post(new Runnable() { @Override public void run() { if (ladeDialog != null) ladeDialog.setMessage("Lade herunter … " + proz + " %"); } }); }
+                        }
+                    }
+                    out.close(); in.close();
+                    if (f.length() < 500000) throw new Exception("Die heruntergeladene Datei ist zu klein (" + f.length() + " Bytes)");
+                    handler.post(new Runnable() { @Override public void run() { if (ladeDialog != null) ladeDialog.setMessage("Installation wird vorbereitet …"); } });
+                    installSitzung(f);
+                } catch (final Exception e) {
+                    handler.post(new Runnable() { @Override public void run() {
+                        if (ladeDialog != null) ladeDialog.dismiss();
+                        new AlertDialog.Builder(MainActivity.this).setTitle("Update fehlgeschlagen").setMessage(String.valueOf(e.getMessage())).setPositiveButton("OK", null).show();
+                    } });
+                }
+            }
+        }).start();
+    }
+
+    void installSitzung(java.io.File f) throws Exception {
+        android.content.pm.PackageInstaller pi = getPackageManager().getPackageInstaller();
+        android.content.pm.PackageInstaller.SessionParams sp = new android.content.pm.PackageInstaller.SessionParams(android.content.pm.PackageInstaller.SessionParams.MODE_FULL_INSTALL);
+        int id = pi.createSession(sp);
+        android.content.pm.PackageInstaller.Session s = pi.openSession(id);
+        java.io.OutputStream os = s.openWrite("update", 0, f.length());
+        java.io.InputStream is = new java.io.FileInputStream(f);
+        byte[] puf = new byte[32768]; int n;
+        while ((n = is.read(puf)) > 0) os.write(puf, 0, n);
+        s.fsync(os); is.close(); os.close();
+        android.content.Intent i = new android.content.Intent(INSTALL_AKTION).setPackage(getPackageName());
+        int flags = android.app.PendingIntent.FLAG_UPDATE_CURRENT | (Build.VERSION.SDK_INT >= 31 ? android.app.PendingIntent.FLAG_MUTABLE : 0);
+        android.app.PendingIntent pend = android.app.PendingIntent.getBroadcast(this, id, i, flags);
+        s.commit(pend.getIntentSender());
+        s.close();
+    }
+
+    void installEmpfaengerAnmelden() {
+        if (installEmpfaenger) return;
+        installEmpfaenger = true;
+        android.content.BroadcastReceiver r = new android.content.BroadcastReceiver() {
+            @Override public void onReceive(Context c, android.content.Intent in) {
+                int st = in.getIntExtra(android.content.pm.PackageInstaller.EXTRA_STATUS, -1);
+                if (st == android.content.pm.PackageInstaller.STATUS_PENDING_USER_ACTION) {
+                    android.content.Intent frage = in.getParcelableExtra(android.content.Intent.EXTRA_INTENT);
+                    if (ladeDialog != null) { ladeDialog.dismiss(); ladeDialog = null; }
+                    if (frage != null) { frage.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK); startActivity(frage); }
+                } else if (st != android.content.pm.PackageInstaller.STATUS_SUCCESS) {
+                    if (ladeDialog != null) { ladeDialog.dismiss(); ladeDialog = null; }
+                    String m = in.getStringExtra(android.content.pm.PackageInstaller.EXTRA_STATUS_MESSAGE);
+                    new AlertDialog.Builder(MainActivity.this).setTitle("Installation nicht möglich").setMessage(m == null ? "Unbekannter Fehler (Status " + st + ")" : m).setPositiveButton("OK", null).show();
+                }
+            }
+        };
+        android.content.IntentFilter fl = new android.content.IntentFilter(INSTALL_AKTION);
+        if (Build.VERSION.SDK_INT >= 33) registerReceiver(r, fl, Context.RECEIVER_NOT_EXPORTED); else registerReceiver(r, fl);
+    }
 
     @Override
     protected void onResume() {
@@ -495,9 +577,7 @@ public class MainActivity extends ReiterMarkt {
             @Override public void onClick(View v) {
                 bestaetigen("Update der Aktien-Satellit-App installieren", new Runnable() {
                     @Override public void run() {
-                        String link = s(up, "Link");
-                        if (link.length() == 0) return;
-                        try { startActivity(new android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(link))); } catch (Exception e) { }
+                        apkInstallieren();   // ab 1.10: Herunterladen und Installieren in der App (Android fragt zum Schluss selbst nach)
                     }
                 });
             }

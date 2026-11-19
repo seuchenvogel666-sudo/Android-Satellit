@@ -6,6 +6,8 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
     <!-- Benachrichtigungen (Notaus, Verlustbremse, großer Gewinn, Tagesbericht, PC offline) -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <!-- Update der App selbst herunterladen und installieren (ab 1.10; Android fragt zum Schluss selbst nach) -->
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
     <!-- Update am Handy mit Fingerabdruck / Gesicht bestätigen -->
     <uses-permission android:name="android.permission.USE_BIOMETRIC" />
 
