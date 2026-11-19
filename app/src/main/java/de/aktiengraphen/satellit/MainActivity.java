@@ -168,7 +168,7 @@ public class MainActivity extends ReiterMarkt {
     }
 
     // ---------- Neue Version bei GitHub (ab 1.08): beim Öffnen der App und beim Entsperren, solange sie geöffnet ist ----------
-    static final String GITHUB_GRADLE = "https://raw.githubusercontent.com/seuchenvogel666-sudo/android-satellit/main/app/build.gradle";
+    static final String GITHUB_VERSION = "https://github.com/seuchenvogel666-sudo/android-satellit/releases/download/satellit-latest/version.txt";
     static final String GITHUB_RELEASE = "https://github.com/seuchenvogel666-sudo/android-satellit/releases/tag/satellit-latest";
     boolean githubLaeuft = false;
 
@@ -182,16 +182,15 @@ public class MainActivity extends ReiterMarkt {
             @Override public void run() {
                 int code = 0; String name = "";
                 try {
-                    java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(GITHUB_GRADLE).openConnection();
+                    // Die Versionsdatei wird vom Bau erst NACH dem Hochladen der fertigen APK veröffentlicht – so kommt der Dialog nie zu früh
+                    java.net.HttpURLConnection c = (java.net.HttpURLConnection) new java.net.URL(GITHUB_VERSION).openConnection();
                     c.setConnectTimeout(6000); c.setReadTimeout(8000);
                     java.io.BufferedReader r = new java.io.BufferedReader(new java.io.InputStreamReader(c.getInputStream(), "UTF-8"));
                     StringBuilder sb = new StringBuilder(); String z;
                     while ((z = r.readLine()) != null) sb.append(z).append('\n');
                     r.close();
-                    java.util.regex.Matcher m1 = java.util.regex.Pattern.compile("versionCode\\s+(\\d+)").matcher(sb);
-                    java.util.regex.Matcher m2 = java.util.regex.Pattern.compile("versionName\\s+'([^']+)'").matcher(sb);
-                    if (m1.find()) code = Integer.parseInt(m1.group(1));
-                    if (m2.find()) name = m2.group(1);
+                    java.util.regex.Matcher m = java.util.regex.Pattern.compile("(\\d+)\\s+(\\S+)").matcher(sb);   // Inhalt: "<versionCode> <versionName>"
+                    if (m.find()) { code = Integer.parseInt(m.group(1)); name = m.group(2); }
                 } catch (Exception ignored) { }
                 githubLaeuft = false;
                 final int neuCode = code; final String neuName = name;

@@ -70,3 +70,14 @@ jobs:
         run: |
           gh release view satellit-latest || gh release create satellit-latest --title "Aktien-Satellit" --notes "Neueste Version der Handy-App (Ansicht, Meldungen und Notaus)."
           gh release upload satellit-latest aktien-satellit.apk --clobber
+
+      # Versionsdatei ERST NACH dem Hochladen der APK: Handy-App und PC lesen diese Datei – so erscheint ein Update-Angebot nie vor der fertigen APK
+      - name: Versionsdatei veröffentlichen
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          CODE=$(grep -oP 'versionCode\s+\K\d+' app/build.gradle)
+          NAME=$(grep -oP "versionName\s+'\K[^']+" app/build.gradle)
+          printf '%s %s\n' "$CODE" "$NAME" > version.txt
+          cat version.txt
+          gh release upload satellit-latest version.txt --clobber
