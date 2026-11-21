@@ -150,12 +150,47 @@ public class MainActivity extends ReiterMarkt {
         inhalt.setOrientation(LinearLayout.VERTICAL);
         inhalt.setPadding(dp(12), dp(4), dp(12), dp(24));
         scroll.addView(inhalt);
+        // Langes Wischen nach unten (ab oberem Rand, ca. 160 dp): Daten beim PC neu anfordern und auf neue Satelliten-Version prüfen.
+        // Beim Ziehen gibt die Ansicht ein Stück nach (Rückmeldung); beim Loslassen nach genug Weg wird aktualisiert.
+        scroll.setOnTouchListener(new View.OnTouchListener() {
+            float startY = -1; boolean genug;
+            @Override public boolean onTouch(View v, android.view.MotionEvent e) {
+                ScrollView sv = (ScrollView) v;
+                switch (e.getActionMasked()) {
+                    case android.view.MotionEvent.ACTION_DOWN:
+                        startY = sv.getScrollY() == 0 ? e.getRawY() : -1; genug = false; break;
+                    case android.view.MotionEvent.ACTION_MOVE:
+                        if (startY < 0 && sv.getScrollY() == 0) startY = e.getRawY();   // erst jetzt ganz oben angekommen
+                        if (startY >= 0) {
+                            float d = e.getRawY() - startY;
+                            sv.setTranslationY(d > 0 ? Math.min(dp(70), d * 0.35f) : 0);
+                            genug = d >= dp(160);
+                        }
+                        break;
+                    case android.view.MotionEvent.ACTION_UP:
+                    case android.view.MotionEvent.ACTION_CANCEL:
+                        sv.animate().translationY(0).setDuration(180).start();
+                        if (genug && e.getActionMasked() == android.view.MotionEvent.ACTION_UP) neuAnfordern();
+                        startY = -1; genug = false;
+                        break;
+                    default: break;
+                }
+                return false;   // das normale Scrollen bleibt unberührt
+            }
+        });
         wurzel.addView(scroll, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
         setContentView(wurzel);
         Hinweise.kanaele(this);
         if (prefs.getString("kopplung", null) != null) benachrichtigungenStarten();
         anzeigen();
+    }
+
+    // Langes Wischen nach unten: Daten vom Master (PC) erneut anfordern und sofort auf neue Satelliten-Versionen prüfen
+    void neuAnfordern() {
+        android.widget.Toast.makeText(this, "Daten werden vom PC neu angefordert und auf neue Satelliten-Versionen geprüft …", android.widget.Toast.LENGTH_SHORT).show();
+        laden();
+        githubPruefen(true);
     }
 
     // Hintergrund-Abruf der Meldungen und (ab Android 13) die Erlaubnis für Benachrichtigungen
@@ -174,10 +209,13 @@ public class MainActivity extends ReiterMarkt {
     static final String GITHUB_RELEASE = "https://github.com/seuchenvogel666-sudo/android-satellit/releases/tag/satellit-latest";
     boolean githubLaeuft = false;
 
-    void githubPruefen() {
+    void githubPruefen() { githubPruefen(false); }
+
+    // manuell (langes Wischen nach unten): ohne die 5-Minuten-Sperre, ohne „Später“-Pause und mit einer Rückmeldung, auch wenn alles aktuell ist
+    void githubPruefen(final boolean manuell) {
         if (githubLaeuft) return;
         long jetzt = System.currentTimeMillis();
-        if (jetzt - prefs.getLong("gh_pruef", 0) < 5 * 60 * 1000L) return;   // höchstens alle 5 Minuten
+        if (!manuell && jetzt - prefs.getLong("gh_pruef", 0) < 5 * 60 * 1000L) return;   // höchstens alle 5 Minuten
         githubLaeuft = true;
         prefs.edit().putLong("gh_pruef", jetzt).apply();
         new Thread(new Runnable() {
@@ -196,15 +234,22 @@ public class MainActivity extends ReiterMarkt {
                 } catch (Exception ignored) { }
                 githubLaeuft = false;
                 final int neuCode = code; final String neuName = name;
-                handler.post(new Runnable() { @Override public void run() { githubDialog(neuCode, neuName); } });
+                handler.post(new Runnable() { @Override public void run() { githubDialog(neuCode, neuName, manuell); } });
             }
         }).start();
     }
 
-    void githubDialog(int neuCode, String neuName) {
-        if (isFinishing() || neuCode <= appCode()) return;
-        // „Später“ gilt 6 Stunden für genau diese Version
-        if (prefs.getInt("gh_spaeter_code", 0) == neuCode && System.currentTimeMillis() < prefs.getLong("gh_spaeter_bis", 0)) return;
+    void githubDialog(int neuCode, String neuName) { githubDialog(neuCode, neuName, false); }
+
+    void githubDialog(int neuCode, String neuName, boolean manuell) {
+        if (isFinishing()) return;
+        if (manuell && neuCode == 0) { android.widget.Toast.makeText(this, "Die Versionsprüfung bei GitHub ist gerade nicht möglich (kein Internet?).", android.widget.Toast.LENGTH_LONG).show(); return; }
+        if (neuCode <= appCode()) {
+            if (manuell) android.widget.Toast.makeText(this, "Der Satellit ist auf dem neuesten Stand (v" + appVersion() + ").", android.widget.Toast.LENGTH_LONG).show();
+            return;
+        }
+        // „Später“ gilt 6 Stunden für genau diese Version – außer bei der manuellen Prüfung
+        if (!manuell && prefs.getInt("gh_spaeter_code", 0) == neuCode && System.currentTimeMillis() < prefs.getLong("gh_spaeter_bis", 0)) return;
         appCodeNeu = neuCode;
         new AlertDialog.Builder(this)
             .setTitle("Neue Version verfügbar")
