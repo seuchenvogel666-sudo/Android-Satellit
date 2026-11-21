@@ -66,6 +66,8 @@ public class MainActivity extends ReiterMarkt {
         Verbindung.appVersion(getApplicationContext());
         reiter =Math.max(0, Math.min(REITER.length - 1, prefs.getInt("reiter7", 2)));
         try { String fs = prefs.getString("farben", null); if (fs != null) farbenAnwenden(new JSONObject(fs)); } catch (Exception ignored) { }
+        // 1.15: solange der Satellit im Vordergrund ist, bleibt das Display an (das Flag wirkt nur für das sichtbare Fenster, nicht im Hintergrund)
+        getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         getWindow().setStatusBarColor(HINTERGRUND);
         getWindow().setNavigationBarColor(HINTERGRUND);
 
@@ -297,7 +299,7 @@ public class MainActivity extends ReiterMarkt {
             }
             throw new Exception("Download nach 8 Versuchen nicht möglich: " + (letzterFehler == null ? "unvollständig" : letzterFehler.getMessage()));
         } finally {
-            runOnUiThread(new Runnable() { @Override public void run() { getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); } });
+            // 1.15: der Bildschirm bleibt ohnehin an, solange der Satellit im Vordergrund ist (siehe onCreate) – hier nichts mehr zurücknehmen
         }
     }
 
@@ -763,7 +765,7 @@ public class MainActivity extends ReiterMarkt {
             if (e == null) continue;
             String zeit = new java.text.SimpleDateFormat("dd.MM. HH:mm", Locale.GERMANY).format(new java.util.Date(e.optLong("Zeit", 0) * 1000));
             String art = s(e, "Art");
-            int farbe = art.equals("notaus") || art.equals("bremse") || art.equals("daten") ? ROT : art.equals("gewinn") ? GRUEN : BLAU;
+            int farbe = art.equals("notaus") || art.equals("bremse") || art.equals("daten") || art.equals("datenfehler") || art.equals("abgleich") ? ROT : art.equals("gewinn") ? GRUEN : BLAU;
             k.addView(text(zeit + " · " + s(e, "Titel"), 13, farbe, true));
             TextView t = text(s(e, "Text"), 12, GRAU, false);
             t.setPadding(0, 0, 0, dp(6));
@@ -797,6 +799,65 @@ public class MainActivity extends ReiterMarkt {
         z.addView(new View(this), new LinearLayout.LayoutParams(dp(8), 1));
         z.addView(k2);
         k.addView(z);
+        // Signaltöne (1.15): je Meldungsart ein Systemton des Handys wählbar
+        TextView th = text("Signaltöne", 15, TEXT, true);
+        th.setPadding(0, dp(14), 0, 0);
+        k.addView(th);
+        k.addView(text("Welcher Ton bei welcher Meldung erklingt. Du kannst jeden Ton durch einen Systemton deines Handys ersetzen oder auf stumm stellen.", 12, GRAU, false));
+        for (int i = 0; i < Hinweise.TON_NAMEN.length; i++) {
+            final int idx = i;
+            final String name = Hinweise.TON_NAMEN[i];
+            TextView bez = text(Hinweise.TON_TEXT[i], 12, TEXT, true);
+            bez.setPadding(0, dp(10), 0, 0);
+            k.addView(bez);
+            k.addView(text("Jetzt: " + Hinweise.tonAnzeige(this, name), 12, GRAU, false));
+            LinearLayout r = new LinearLayout(this);
+            r.setOrientation(LinearLayout.HORIZONTAL);
+            r.setPadding(0, dp(4), 0, 0);
+            TextView wahl = knopf("Ton wählen");
+            wahl.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) { tonWaehlen(idx); }
+            });
+            TextView hoeren = knopf("Anhören");
+            hoeren.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) { Hinweise.tonVorspielen(MainActivity.this, name); }
+            });
+            TextView zurueck = knopf("Standard");
+            zurueck.setOnClickListener(new View.OnClickListener() {
+                @Override public void onClick(View v) { Hinweise.tonSpeichern(MainActivity.this, name, ""); anzeigen(); }
+            });
+            r.addView(wahl);
+            r.addView(new View(this), new LinearLayout.LayoutParams(dp(8), 1));
+            r.addView(hoeren);
+            r.addView(new View(this), new LinearLayout.LayoutParams(dp(8), 1));
+            r.addView(zurueck);
+            k.addView(r);
+        }
         inhalt.addView(k);
+    }
+
+    // Auswahl eines Systemtons (Klingelton-Auswahl des Handys: Benachrichtigungs-, Alarm- und Klingeltöne, auch „Kein Ton“)
+    static final int TON_ANFRAGE = 4100;
+
+    void tonWaehlen(int idx) {
+        String name = Hinweise.TON_NAMEN[idx];
+        android.content.Intent in = new android.content.Intent(android.media.RingtoneManager.ACTION_RINGTONE_PICKER);
+        in.putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_TYPE, android.media.RingtoneManager.TYPE_ALL);
+        in.putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, false);
+        in.putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, true);
+        in.putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_TITLE, "Ton für: " + Hinweise.TON_TEXT[idx].split(" – ")[0]);
+        android.net.Uri jetzt = Hinweise.tonJetzt(this, name);
+        in.putExtra(android.media.RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, jetzt);
+        try { startActivityForResult(in, TON_ANFRAGE + idx); } catch (Exception e) { android.widget.Toast.makeText(this, "Die Tonauswahl lässt sich auf diesem Handy nicht öffnen.", android.widget.Toast.LENGTH_LONG).show(); }
+    }
+
+    @Override
+    protected void onActivityResult(int anfrage, int ergebnis, android.content.Intent daten2) {
+        super.onActivityResult(anfrage, ergebnis, daten2);
+        int idx = anfrage - TON_ANFRAGE;
+        if (idx < 0 || idx >= Hinweise.TON_NAMEN.length || ergebnis != RESULT_OK || daten2 == null) return;
+        android.net.Uri u = daten2.getParcelableExtra(android.media.RingtoneManager.EXTRA_RINGTONE_PICKED_URI);
+        Hinweise.tonSpeichern(this, Hinweise.TON_NAMEN[idx], u == null ? "-" : u.toString());   // keine Adresse = „Kein Ton“ gewählt
+        anzeigen();
     }
 }
