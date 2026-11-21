@@ -48,7 +48,7 @@ abstract class ReiterDepots extends Basis {
         if (!real) meldungenBereich();
         else inhalt.addView(hinweis("Realdepots sind ein Echtgeld-PROBELAUF: Sie handeln mit den Regeln des gewählten Brokers, es fließt aber kein echtes Geld – jede Order wird am PC nur protokolliert.", GELB));
         depotListe(real);
-        if (!real) einstellungenBereich();
+
     }
 
     void depotListe(boolean real) {

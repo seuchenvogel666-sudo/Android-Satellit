@@ -380,7 +380,7 @@ abstract class ReiterAnalyse extends ReiterDepots {
         else for (int i = 0; i < l.length(); i++) ks.addView(text(l.optString(i, ""), 12, GRAU, false));
         ks.addView(text("Sichern und Wiederherstellen geht am PC (Reiter „System“).", 11, GRAU, false));
         inhalt.addView(ks);
-        einstellungenBereich();
+
     }
 
     // Abfragen & Auslastung: wie intensiv der PC gerade Daten abfragt (erlaubt / eingestellt / verbraucht)

@@ -119,7 +119,7 @@ public class MainActivity extends ReiterMarkt {
         reiterBlock.setBackgroundColor(TIEF);   // wie die Navigation im Einstellungsfenster am PC, hier oben
         LinearLayout reiterLeiste = null;
         for (int i = 0; i < REITER.length; i++) {
-            if (i == 0 || i == 4) {
+            if (i == 0 || i == 3 || i == 6) {
                 reiterLeiste = new LinearLayout(this);
                 reiterLeiste.setOrientation(LinearLayout.HORIZONTAL);
                 reiterLeiste.setPadding(0, dp(2), 0, dp(2));
@@ -601,6 +601,8 @@ public class MainActivity extends ReiterMarkt {
         TextView unter = text(REITER_UNTER[reiter], 12, GRAU, false);
         unter.setPadding(0, dp(2), 0, dp(6));
         inhalt.addView(unter);
+        // 1.17: eigener Reiter „Einstellungen“ – auch ohne Kopplung, ohne Heimnetz und ohne Daten vom PC erreichbar
+        if (reiter == 8) { einstellungenBereich(); return; }
         if (fehler != null) inhalt.addView(hinweis("⚠  Keine Verbindung zum PC\n" + fehler, ROT));
         if (warten != null && prefs.getString("kopplung", null) != null) inhalt.addView(hinweis("⏳ " + warten, GELB));
         if (prefs.getString("kopplung", null) == null) {
@@ -641,7 +643,7 @@ public class MainActivity extends ReiterMarkt {
 
     static final String[] REITER_UNTER = {
         "Deine Positionen mit Kurs und Empfehlung", "Die besten Empfehlungen je Kategorie", "Übungsdepots: Wert, Bestand und Trades", "Realdepots (Echtgeld-Probelauf)",
-        "Auswertung der Übungsdepots", "Backtest und Langzeittests – auch vom Handy startbar", "Zustand des PCs, Abfragen und Befehle", "Tagesberichte und Wochenteil vom PC" };
+        "Auswertung der Übungsdepots", "Backtest und Langzeittests – auch vom Handy startbar", "Zustand des PCs, Abfragen und Befehle", "Tagesberichte und Wochenteil vom PC", "Meldungen, Signaltöne und Systemtöne des Handys" };
 
     // Update der Handy-App: nur wenn der PC es anbietet; Installation erst nach Bestätigung per Fingerabdruck / Gesicht
     void updateAngebot() {
