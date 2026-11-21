@@ -52,10 +52,34 @@ import java.util.Set;
 public class MainActivity extends ReiterMarkt {
 
 
+    int letzterHash = 0;   // Prüfsumme der zuletzt vom PC erhaltenen Daten (siehe laden)
+    static volatile boolean sichtbar = false;   // 1.19: der Hintergrunddienst muss nicht zusätzlich abrufen, solange die App selbst lädt
+
+    // 1.19 (Akku): Abstand der automatischen Aktualisierung einstellbar (1, 2 oder 5 Minuten; Standard 2)
+    long neuLadenMs() { int m = prefs.getInt("intervall_min", 2); return (m == 1 || m == 5 ? m : 2) * 60000L; }
+
+    // 1.19 (Akku): Display anlassen: "immer" (Standard), "15" = nach 15 Minuten ohne Berührung wieder normal, "aus"
+    final Runnable displayNormal = new Runnable() {
+        @Override public void run() { getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); }
+    };
+    void displayAnwenden() {
+        String m = prefs.getString("display_an", "immer");
+        handler.removeCallbacks(displayNormal);
+        if (m.equals("aus")) { getWindow().clearFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON); return; }
+        getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        if (m.equals("15")) handler.postDelayed(displayNormal, 15 * 60 * 1000L);
+    }
+
+    @Override
+    public void onUserInteraction() {
+        super.onUserInteraction();
+        if (prefs != null && prefs.getString("display_an", "immer").equals("15")) displayAnwenden();   // jede Berührung verlängert um 15 Minuten
+    }
+
     final Runnable automatisch = new Runnable() {
         @Override public void run() {
             laden();
-            handler.postDelayed(this, NEU_LADEN_MS);
+            handler.postDelayed(this, neuLadenMs());
         }
     };
 
@@ -67,7 +91,7 @@ public class MainActivity extends ReiterMarkt {
         reiter =Math.max(0, Math.min(REITER.length - 1, prefs.getInt("reiter7", 2)));
         try { String fs = prefs.getString("farben", null); if (fs != null) farbenAnwenden(new JSONObject(fs)); } catch (Exception ignored) { }
         // 1.15: solange der Satellit im Vordergrund ist, bleibt das Display an (das Flag wirkt nur für das sichtbare Fenster, nicht im Hintergrund)
-        getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        displayAnwenden();
         getWindow().setStatusBarColor(HINTERGRUND);
         getWindow().setNavigationBarColor(HINTERGRUND);
 
@@ -389,6 +413,8 @@ public class MainActivity extends ReiterMarkt {
     protected void onResume() {
         super.onResume();
         githubPruefen();
+        sichtbar = true;
+        displayAnwenden();
         handler.removeCallbacks(automatisch);
         handler.post(automatisch);
     }
@@ -396,6 +422,7 @@ public class MainActivity extends ReiterMarkt {
     @Override
     protected void onPause() {
         super.onPause();
+        sichtbar = false;
         handler.removeCallbacks(automatisch);
         handler.removeCallbacks(nochmal);
     }
@@ -519,9 +546,11 @@ public class MainActivity extends ReiterMarkt {
         new Thread(new Runnable() {
             @Override public void run() {
                 JSONObject neu = null;
-                String f = null, w = null;
+                String f = null, w = null; int hashNeu = 0;
                 try {
-                    neu = new JSONObject(Verbindung.abrufen(k, netz.getSocketFactory(), gid, gname));
+                    String roh = Verbindung.abrufen(k, netz.getSocketFactory(), gid, gname);
+                    hashNeu = roh.hashCode();
+                    neu = new JSONObject(roh);
                     if (!neu.has("Depots")) throw new Verbindung.Fehler("Unerwartete Daten vom PC.");
                     Hinweise.pcErreichbar(getApplicationContext());
                     Hinweise.verarbeiten(getApplicationContext(), neu);
@@ -533,7 +562,7 @@ public class MainActivity extends ReiterMarkt {
                     f = "Die Daten vom PC konnten nicht gelesen werden: " + e.getMessage();
                 }
                 final JSONObject ergebnis = neu;
-                final String fehlerText = f, wartenText = w;
+                final String fehlerText = f, wartenText = w; final int hashFinal = hashNeu;
                 handler.post(new Runnable() {
                     @Override public void run() {
                         laedt = false;
@@ -550,12 +579,15 @@ public class MainActivity extends ReiterMarkt {
                                 }
                             }
                         }
-                        if (ergebnis != null) daten = ergebnis;
+                        // 1.19 (Akku): kamen genau dieselben Daten wie beim letzten Mal und hat sich sonst nichts geändert, wird die Ansicht nicht neu aufgebaut
+                        boolean unveraendert = ergebnis != null && hashFinal == letzterHash && fehlerText == null && wartenText == null && fehler == null && warten == null;
+                        if (ergebnis != null) { daten = ergebnis; letzterHash = hashFinal; }
                         fehler = fehlerText;
                         warten = wartenText;
                         // solange der PC fragt: alle 3 Sekunden nachsehen, ob erlaubt wurde
                         handler.removeCallbacks(nochmal);
                         if (wartenText != null) handler.postDelayed(nochmal, 3000);
+                        if (unveraendert) { aktualisiereKopf(); return; }
                         anzeigen();
                     }
                 });
@@ -868,6 +900,37 @@ public class MainActivity extends ReiterMarkt {
         z.addView(new View(this), new LinearLayout.LayoutParams(dp(8), 1));
         z.addView(k2);
         k.addView(z);
+        // Akku (1.19): wie oft die offene App lädt und wie lange das Display anbleibt – beides schont den Akku
+        TextView ah = text("Akku", 15, TEXT, true);
+        ah.setPadding(0, dp(14), 0, 0);
+        k.addView(ah);
+        k.addView(text("Der größte Stromverbraucher ist das Display: Solange der Satellit offen ist, bleibt es standardmäßig an. Die Meldungen im Hintergrund brauchen kaum Strom (alle 15 Minuten, nur im Heimnetz).", 12, GRAU, false));
+        LinearLayout ak = new LinearLayout(this);
+        ak.setOrientation(LinearLayout.HORIZONTAL);
+        ak.setPadding(0, dp(8), 0, 0);
+        final int min = prefs.getInt("intervall_min", 2);
+        TextView kIv = knopf("Aktualisierung: " + (min == 1 ? "1 Min." : min == 5 ? "5 Min." : "2 Min."));
+        kIv.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                prefs.edit().putInt("intervall_min", min == 1 ? 2 : min == 2 ? 5 : 1).apply();
+                handler.removeCallbacks(automatisch);
+                handler.postDelayed(automatisch, neuLadenMs());
+                anzeigen();
+            }
+        });
+        final String dm = prefs.getString("display_an", "immer");
+        TextView kDi = knopf("Display: " + (dm.equals("aus") ? "normal" : dm.equals("15") ? "15 Min. an" : "immer an"));
+        kDi.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                prefs.edit().putString("display_an", dm.equals("immer") ? "15" : dm.equals("15") ? "aus" : "immer").apply();
+                displayAnwenden();
+                anzeigen();
+            }
+        });
+        ak.addView(kIv, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        ak.addView(new View(this), new LinearLayout.LayoutParams(dp(8), 1));
+        ak.addView(kDi, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        k.addView(ak);
         // Signaltöne (1.15): je Meldungsart ein Systemton des Handys wählbar
         TextView th = text("Signaltöne", 15, TEXT, true);
         th.setPadding(0, dp(14), 0, 0);

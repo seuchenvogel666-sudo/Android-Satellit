@@ -34,6 +34,7 @@ public class Waechter extends Worker {
 
     @NonNull @Override
     public Result doWork() {
+        if (MainActivity.sichtbar) return Result.success();   // 1.19 (Akku): die offene App lädt selbst und zeigt die Meldungen
         Context c = getApplicationContext();
         Verbindung.appVersion(c);
         SharedPreferences p = Hinweise.prefs(c);
