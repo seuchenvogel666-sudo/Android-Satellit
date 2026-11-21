@@ -97,18 +97,17 @@ public class MainActivity extends ReiterMarkt {
         LinearLayout knoepfe = new LinearLayout(this);
         knoepfe.setOrientation(LinearLayout.HORIZONTAL);
         knoepfe.setPadding(0, dp(8), 0, 0);
-        TextView neu = knopf("↻ Laden");
-        neu.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { laden(); } });
-        TextView koppeln = knopf("⌗ Koppeln (QR)");
-        koppeln.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { scannen(); } });
-        TextView trennen = knopf("Trennen");
-        trennen.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { trennenFragen(); } });
-        // drei gleich breite Knöpfe – passen auch auf schmale Handys in eine Zeile
-        knoepfe.addView(neu, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
-        knoepfe.addView(new View(this), new LinearLayout.LayoutParams(dp(6), 1));
-        knoepfe.addView(koppeln, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.3f));
-        knoepfe.addView(new View(this), new LinearLayout.LayoutParams(dp(6), 1));
-        knoepfe.addView(trennen, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        // 1.18: Laden, Koppeln und Trennen stehen jetzt zusammen mit den Einstellungen im Reiter „Einstellungen“ – hier oben ein einziger Knopf an ihrer Stelle
+        TextView einst = knopf("⚙ Einstellungen");
+        einst.setOnClickListener(new View.OnClickListener() {
+            @Override public void onClick(View v) {
+                reiter = 8;
+                prefs.edit().putInt("reiter7", 8).apply();
+                anzeigen();
+            }
+        });
+        reiterKnoepfe[8] = einst;   // wird wie die übrigen Reiter hervorgehoben, wenn er aktiv ist
+        knoepfe.addView(einst, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         kopf.addView(knoepfe);
         wurzel.addView(kopf);
 
@@ -118,8 +117,8 @@ public class MainActivity extends ReiterMarkt {
         reiterBlock.setPadding(dp(10), dp(8), dp(10), dp(8));
         reiterBlock.setBackgroundColor(TIEF);   // wie die Navigation im Einstellungsfenster am PC, hier oben
         LinearLayout reiterLeiste = null;
-        for (int i = 0; i < REITER.length; i++) {
-            if (i == 0 || i == 3 || i == 6) {
+        for (int i = 0; i < REITER.length - 1; i++) {
+            if (i == 0 || i == 4) {
                 reiterLeiste = new LinearLayout(this);
                 reiterLeiste.setOrientation(LinearLayout.HORIZONTAL);
                 reiterLeiste.setPadding(0, dp(2), 0, dp(2));
@@ -609,7 +608,7 @@ public class MainActivity extends ReiterMarkt {
             inhalt.addView(hinweis("Willkommen! So koppelst du den Satelliten mit deinem PC:\n\n" +
                     "1. Das Handy ins selbe WLAN bringen, in dem dein PC steht.\n\n" +
                     "2. Am PC in Aktien-Graphen unter Einstellungen › Handy-Satellit den Handy-Satelliten einschalten und „Kopplungs-Code zeigen“ klicken.\n\n" +
-                    "3. Hier oben „QR-Code scannen“ tippen und den Code vom PC-Bildschirm scannen.\n\n" +
+                    "3. Oben „Einstellungen“ öffnen, dort „Koppeln (QR)“ tippen und den Code vom PC-Bildschirm scannen.\n\n" +
                     "4. Am PC erscheint eine Abfrage – dort „Erlauben“ klicken.\n\n" +
                     "Danach holt die App die Daten jede Minute direkt vom PC – nur in deinem Heimnetz, verschlüsselt und ohne Cloud. " +
                     "Am PC kann sie: per NOTAUS sofort jeden Handel stoppen, die Empfehlungen lokal neu berechnen lassen (ab 48 Std. Alter) und einen Backtest je Depot starten (höchstens alle 2 Std.) – sofern der PC das erlaubt. Freigeben geht nur am PC.", TEXT));
@@ -822,6 +821,29 @@ public class MainActivity extends ReiterMarkt {
     }
 
     void einstellungenBereich() {
+        // Verbindung: Laden, Koppeln, Trennen (früher drei Knöpfe oben)
+        LinearLayout kv = karte();
+        kv.addView(text("Verbindung zum PC", 15, TEXT, true));
+        boolean gekoppelt = prefs.getString("kopplung", null) != null;
+        kv.addView(text(gekoppelt ? "Gekoppelt. Die Daten kommen direkt vom PC, nur im Heimnetz. Tipp: Ein langes Wischen nach unten lädt ebenfalls neu und prüft auf eine neue Satelliten-Version."
+                                  : "Noch nicht gekoppelt: Am PC unter Einstellungen › Handy-Satellit den Kopplungs-Code zeigen, hier „Koppeln (QR)“ tippen und scannen.", 12, GRAU, false));
+        LinearLayout vz = new LinearLayout(this);
+        vz.setOrientation(LinearLayout.HORIZONTAL);
+        vz.setPadding(0, dp(8), 0, 0);
+        TextView neu = knopf("↻ Laden");
+        neu.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { neuAnfordern(); } });
+        TextView koppeln = knopf("⌗ Koppeln (QR)");
+        koppeln.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { scannen(); } });
+        TextView trennen = knopf("Trennen");
+        trennen.setOnClickListener(new View.OnClickListener() { @Override public void onClick(View v) { trennenFragen(); } });
+        vz.addView(neu, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        vz.addView(new View(this), new LinearLayout.LayoutParams(dp(6), 1));
+        vz.addView(koppeln, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.3f));
+        vz.addView(new View(this), new LinearLayout.LayoutParams(dp(6), 1));
+        vz.addView(trennen, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        kv.addView(vz);
+        inhalt.addView(kv);
+
         LinearLayout k = karte();
         k.addView(text("Benachrichtigungen", 15, TEXT, true));
         k.addView(text("Etwa alle 15 Minuten fragt das Handy im Heimnetz beim PC nach neuen Meldungen: Notaus, Verlustbremse, großer Gewinn, " +
